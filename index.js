@@ -1,8 +1,8 @@
-require('dotenv').config(); // .env dosyasını okuması için
+require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const app = express();
 app.use(express.json());
@@ -19,8 +19,9 @@ mongoose.connect(MONGO_URI)
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true },
     password: { type: String, required: true },
-    hwid: { type: String, default: null }, // İlk giren cihaza kilitlenir
-    plan: { type: String, default: "free" } // "free" veya "premium"
+    hwid: { type: String, default: null },
+    plan: { type: String, default: "free" },
+    discordId: { type: String, default: null } // 1 kez key hakkı için Discord ID takibi
 });
 const UserModel = mongoose.model('User', UserSchema);
 
@@ -36,36 +37,6 @@ function generateRandomString(length) {
 // ==========================================
 // 2. EXPRESS API (ROBLOX KÖPRÜSÜ)
 // ==========================================
-
-// Key Oluşturma API
-app.post('/api/create-key', async (req, res) => {
-    try {
-        const { planType } = req.body;
-        const username = "luas"; 
-        const randomPart = generateRandomString(6); 
-        const password = "Luas-" + randomPart; 
-        
-        const newKey = new UserModel({
-            username: username,
-            password: password,
-            plan: planType || "free" 
-        });
-
-        await newKey.save();
-
-        res.json({
-            success: true,
-            message: "Key başarıyla oluşturuldu!",
-            username: username,
-            password: password,
-            plan: newKey.plan
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Sunucu hatası: " + error.message });
-    }
-});
-
-// Ortak Giriş/Doğrulama Fonksiyonu (Kod tekrarı olmasın diye)
 const handleLogin = async (req, res) => {
     const { username, password, hwid } = req.body;
 
@@ -99,13 +70,12 @@ const handleLogin = async (req, res) => {
     }
 };
 
-// 404 hatasını kalıcı olarak yok etmek için hem /login hem /api/login yollarını aktif ettik!
 app.post('/login', handleLogin);
 app.post('/api/login', handleLogin);
 app.post('/api/verify', handleLogin);
 
 // ==========================================
-// 3. DISCORD BOT BAĞLANTISI & KOMUTLAR
+// 3. DISCORD BOT & BUTON YÖNETİMİ
 // ==========================================
 const client = new Client({
     intents: [
@@ -115,109 +85,109 @@ const client = new Client({
     ]
 });
 
-// Bot aktif olduğunda slash komutlarını Discord'a kaydet
 client.once('ready', async () => {
-    console.log(`🤖 Discord botu başarıyla aktif edildi! Giriş yapılan hesap: ${client.user.tag}`);
+    console.log(`🤖 Discord botu aktif edildi! Giriş: ${client.user.tag}`);
 
-    const commands = [
-        new SlashCommandBuilder().setName('bedava-key').setDescription('Ücretsiz key oluşturur.'),
-        new SlashCommandBuilder().setName('ozel-key').setDescription('Özel/Premium key oluşturur.'),
-        new SlashCommandBuilder().setName('hwid-sifirla').setDescription('Keyinize bağlı HWID sıfırlar.')
-            .addStringOption(option => option.setName('key').setDescription('Sıfırlanacak Key').setRequired(true))
-    ].map(command => command.toJSON());
-
-    const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
-    try {
-        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('✨ Discord Slash komutları başarıyla yüklendi.');
-    } catch (error) {
-        console.error('Komut yükleme hatası:', error);
-    }
+    // Eğer komutları harici (commands klasöründen) okutuyorsan burayı silebilirsin. 
+    // Tek dosyada topladıysan /bedava-key buraya da eklenebilir.
 });
 
-// Key oluşturup kullanıcıya gönderme fonksiyonu (Zaman aşımını önlemek için deferReply kullanır)
-async function createAndSendKey(interaction, planType) {
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
-        const username = "luas";
-        const password = "Luas-" + generateRandomString(6);
-        
-        const newKey = new UserModel({
-            username: username,
-            password: password,
-            plan: planType
-        });
-        await newKey.save();
-
-        const embed = new EmbedBuilder()
-            .setTitle("🔑 Başarıyla Key Oluşturuldu!")
-            .setDescription(`Aşağıdaki bilgileri kullanarak giriş yapabilirsin.\n\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key (Şifre):** \`${password}\`\n📌 **Plan:** \`${planType}\``)
-            .setColor(0x00A0FF)
-            .setTimestamp();
-
-        try {
-            await interaction.user.send({ embeds: [embed] });
-            await interaction.editReply({ content: "✅ Key'in başarıyla özel mesaj (DM) olarak gönderildi!" });
-        } catch (dmError) {
-            await interaction.editReply({ content: "⚠️ DM kutun kapalı olduğu için gizli mesaj olarak buraya gönderildi:", embeds: [embed] });
-        }
-    } catch (err) {
-        console.error(err);
-        await interaction.editReply({ content: "❌ Key oluşturulurken veritabanı hatası oluştu!" });
-    }
-}
-
-// Komut ve Etkileşim Yönetimi
+// Buton ve Komut Etkileşimleri
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+    // 1) /bedava-key Komutu Çalıştırıldığında Paneli Gönderir
+    if (interaction.isChatInputCommand() && interaction.commandName === 'bedava-key') {
+        const embed = new EmbedBuilder()
+            .setColor('#2B2D31')
+            .setTitle('🚀 LUAPREMIUM • ÜCRETSİZ KEY PANELİ')
+            .setDescription(
+                '> 🎯 **Aşağıdaki butona basarak HWID kilitli ücretsiz keyini hemen alabilirsin!**\n\n' +
+                '➔ **Sistem İşleyişi:**\n' +
+                '   > 🔹 Butona tıkladığın anda sistem sana özel bir key oluşturur.\n' +
+                '   > 🔹 Key ve **Key ID** bilgin doğrudan **DM (Özel Mesaj)** kutuna gönderilir.\n' +
+                '   > 🔹 Key, giriş yaptığın ilk bilgisayara (HWID) güvenle kilitlenir.\n\n' +
+                '⚠️ *Not: Botun sana mesaj atabilmesi için DM kutunun açık olması gerekir.*'
+            )
+            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+            .setFooter({ text: `${interaction.guild.name} • Güvenli Lisans Sistemi`, iconURL: interaction.client.user.displayAvatarURL() });
 
-    const { commandName } = interaction;
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('get_free_key')
+                    .setLabel('🎫 Hemen Ücretsiz Key Al')
+                    .setStyle(ButtonStyle.Success)
+            );
 
-    if (commandName === 'bedava-key') {
-        await createAndSendKey(interaction, 'free');
-    } 
-    else if (commandName === 'ozel-key') {
-        await createAndSendKey(interaction, 'premium');
+        await interaction.reply({ content: '✅ Şık key paneli kanala başarıyla kuruldu!', ephemeral: true });
+        await interaction.channel.send({ embeds: [embed], components: [row] });
+        return;
     }
-    else if (commandName === 'hwid-sifirla') {
+
+    // 2) Kullanıcı "Hemen Ücretsiz Key Al" Butonuna Bastığında
+    if (interaction.isButton() && interaction.customId === 'get_free_key') {
         await interaction.deferReply({ ephemeral: true });
-        const keyToReset = interaction.options.getString('key');
-        
+        const discordId = interaction.user.id;
+
         try {
-            const user = await UserModel.findOne({ password: keyToReset });
-            if (!user) {
-                return interaction.editReply({ content: "❌ Böyle bir key bulunamadı!" });
+            // Kullanıcının daha önce key alıp almadığını kontrol et (1 kez hakkı var)
+            let user = await UserModel.findOne({ discordId: discordId });
+
+            if (user) {
+                // Zaten varsa mevcut keyini tekrar DM at
+                const existingEmbed = new EmbedBuilder()
+                    .setTitle("🔑 Zaten Bir Keyin Bulunuyor!")
+                    .setDescription(`Daha önce oluşturduğun bilgiler aşağıdadır:\n\n👤 **Kullanıcı Adı:** \`${user.username}\`\n🔑 **Key (Şifre):** \`${user.password}\`\n📌 **Plan:** \`${user.plan}\``)
+                    .setColor(0xFFA500)
+                    .setTimestamp();
+
+                try {
+                    await interaction.user.send({ embeds: [existingEmbed] });
+                    await interaction.editReply({ content: "⚠️ Sistemde kayıtlı bir keyin zaten var! Bilgilerin özel mesaj (DM) olarak tekrar gönderildi." });
+                } catch (dmErr) {
+                    await interaction.editReply({ content: "⚠️ Zaten kayıtlı bir keyin var ancak DM kutun kapalı! Bilgilerin:", embeds: [existingEmbed] });
+                }
+                return;
             }
-            user.hwid = null;
+
+            // Yeni Free Key Oluştur ve Kaydet
+            const username = "luas";
+            const password = "Luas-" + generateRandomString(6);
+            
+            user = new UserModel({
+                username: username,
+                password: password,
+                plan: "free",
+                discordId: discordId
+            });
             await user.save();
-            await interaction.editReply({ content: `✅ **${keyToReset}** adlı keyin HWID kilidi başarıyla sıfırlandı!` });
+
+            const newEmbed = new EmbedBuilder()
+                .setTitle("🔑 Ücretsiz Key'in Başarıyla Oluşturuldu!")
+                .setDescription(`Giriş bilgileriniz aşağıdadır:\n\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key (Şifre):** \`${password}\`\n📌 **Plan:** \`free\``)
+                .setColor(0x00A0FF)
+                .setTimestamp();
+
+            try {
+                await interaction.user.send({ embeds: [newEmbed] });
+                await interaction.editReply({ content: "✅ Ücretsiz key'in başarıyla oluşturuldu ve özel mesaj (DM) olarak gönderildi!" });
+            } catch (dmError) {
+                await interaction.editReply({ content: "⚠️ Key oluşturuldu ancak DM kutun kapalı olduğu için buradan paylaşıldı:", embeds: [newEmbed] });
+            }
         } catch (err) {
-            await interaction.editReply({ content: "❌ Veritabanı hatası oluştu." });
+            console.error(err);
+            await interaction.editReply({ content: "❌ İşlem sırasında bir veritabanı hatası oluştu!" });
         }
     }
 });
 
-// Eski tip ping komutu (Test için)
-client.on('messageCreate', (message) => {
-    if (message.author.bot) return;
-    if (message.content === '!ping') {
-        message.reply('Pong! Bot sorunsuz çalışıyor 🏓');
-    }
-});
-
-// Ortamdan (Environment) BOT_TOKEN'ı çekip giriş yaptırma
 if (!process.env.BOT_TOKEN) {
-    console.error("⛔ HATA: BOT_TOKEN bulunamadı! .env dosyasını veya Render Environment Variables kısmını kontrol et.");
+    console.error("⛔ BOT_TOKEN bulunamadı!");
 } else {
     client.login(process.env.BOT_TOKEN).catch(err => {
-        console.error("⛔ Discord'a bağlanırken hata oluştu (Token yanlış veya Intent'ler kapalı olabilir):", err);
+        console.error("⛔ Discord bağlantı hatası:", err);
     });
 }
 
-// ==========================================
-// 4. SUNUCUYU BAŞLAT
-// ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🌐 Web Sunucusu ${PORT} portunda çalışıyor.`);
