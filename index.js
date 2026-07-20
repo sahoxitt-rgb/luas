@@ -36,6 +36,8 @@ function generateRandomString(length) {
 // ==========================================
 // 2. EXPRESS API (ROBLOX KÖPRÜSÜ)
 // ==========================================
+
+// Key Oluşturma API
 app.post('/api/create-key', async (req, res) => {
     try {
         const { planType } = req.body;
@@ -63,7 +65,8 @@ app.post('/api/create-key', async (req, res) => {
     }
 });
 
-app.post('/api/verify', async (req, res) => {
+// Ortak Giriş/Doğrulama Fonksiyonu (Kod tekrarı olmasın diye)
+const handleLogin = async (req, res) => {
     const { username, password, hwid } = req.body;
 
     if (!username || !password) {
@@ -94,7 +97,12 @@ app.post('/api/verify', async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: "Veritabanı hatası!" });
     }
-});
+};
+
+// 404 hatasını kalıcı olarak yok etmek için hem /login hem /api/login yollarını aktif ettik!
+app.post('/login', handleLogin);
+app.post('/api/login', handleLogin);
+app.post('/api/verify', handleLogin);
 
 // ==========================================
 // 3. DISCORD BOT BAĞLANTISI & KOMUTLAR
