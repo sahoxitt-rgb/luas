@@ -1,45 +1,65 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const KeyModel = require('../models/Key');
-const crypto = require('crypto');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
 module.exports = {
-    // Discord açılır menüsünde görünecek ayarlar
     data: new SlashCommandBuilder()
         .setName('ozel-key')
-        .setDescription('Premium hesap ve key oluşturur.')
-        // Sadece Yönetici (Administrator) yetkisi olanlar görebilir/kullanabilir
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        // 1. Kutucuk: Kullanıcı Adı
-        .addStringOption(option => 
-            option.setName('kullanici_adi')
-                .setDescription('Oluşturulacak hesabın kullanıcı adını girin.')
-                .setRequired(true))
-        // 2. Kutucuk: Şifre
-        .addStringOption(option => 
-            option.setName('sifre')
-                .setDescription('Oluşturulacak hesabın şifresini girin.')
-                .setRequired(true)),
+        .setDescription('Ozel/Premium key olusturma paneli kurar.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
-        // Kullanıcının kutucuklara yazdığı verileri çekiyoruz
-        const username = interaction.options.getString('kullanici_adi');
-        const password = interaction.options.getString('sifre');
-        
-        const newKey = `PREM-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-
-        // Veritabanına kaydet
-        await KeyModel.create({ key: newKey, type: 'premium', username, password });
+        await interaction.deferReply({ ephemeral: true });
 
         const embed = new EmbedBuilder()
-            .setColor('#00A0FF')
-            .setTitle('💎 Premium Hesap Oluşturuldu')
-            .addFields(
-                { name: 'Kullanıcı Adı', value: username, inline: true },
-                { name: 'Şifre', value: password, inline: true },
-                { name: 'Özel Key', value: newKey, inline: false }
-            )
-            .setFooter({ text: 'Sistem başarıyla veritabanına kaydedildi.' });
+            .setColor('#FFD700')
+            .setTitle('LUAPREMIUM • OZEL KEY OLUSTURMA PANELI')
+            .setDescription('Asagidaki butona tiklayarak acilan formdan isim, key ve sure belirleyip ozel key olusturabilirsin.')
+            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+            .setFooter({ text: `${interaction.guild.name} • Ozel Lisans Sistemi` });
 
-        await interaction.reply({ embeds: [embed] });
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('open_custom_modal').setLabel('Ozel Key Olustur (Form)').setStyle(ButtonStyle.Success)
+        );
+
+        await interaction.channel.send({ embeds: [embed], components: [row] });
+        await interaction.editReply({ content: 'Ozel key paneli basariyla kuruldu.' });
+    },
+
+    async handleButton(interaction) {
+        if (interaction.customId !== 'open_custom_modal') return;
+
+        const modal = new ModalBuilder()
+            .setCustomId('customKeyModal')
+            .setTitle('Ozel Key Tanimlama Formu');
+
+        const usernameInput = new TextInputBuilder()
+            .setCustomId('usernameInput')
+            .setLabel('Kullanici Adi')
+            .setPlaceholder('Orn: luas')
+            .setValue('luas')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+        const keyInput = new TextInputBuilder()
+            .setCustomId('keyInput')
+            .setLabel('Key (Sifre)')
+            .setPlaceholder('Orn: Luas-OzelKey123')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+            const durationInput = new TextInputBuilder()
+            .setCustomId('durationInput')
+            .setLabel('Sure (Orn: 30 Gun / Lifetime)')
+            .setPlaceholder('30 Gun')
+            .setValue('Lifetime')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(usernameInput),
+            new ActionRowBuilder().addComponents(keyInput),
+            new ActionRowBuilder().addComponents(durationInput)
+        );
+
+        await interaction.showModal(modal);
     }
 };
