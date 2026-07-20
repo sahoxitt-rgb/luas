@@ -7,9 +7,6 @@ const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuild
 const app = express();
 app.use(express.json());
 
-// ==========================================
-// 1. MONGODB BAĞLANTISI VE ŞEMA
-// ==========================================
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://luas:luasorj@cluster0.i2qdv7n.mongodb.net/?appName=Cluster0";
 
 mongoose.connect(MONGO_URI)
@@ -21,7 +18,7 @@ const UserSchema = new mongoose.Schema({
     password: { type: String, required: true },
     hwid: { type: String, default: null },
     plan: { type: String, default: "free" },
-    discordId: { type: String, default: null } // 1 kez key hakkı için Discord ID takibi
+    discordId: { type: String, default: null }
 });
 const UserModel = mongoose.model('User', UserSchema);
 
@@ -34,9 +31,6 @@ function generateRandomString(length) {
     return result;
 }
 
-// ==========================================
-// 2. EXPRESS API (ROBLOX KÖPRÜSÜ)
-// ==========================================
 const handleLogin = async (req, res) => {
     const { username, password, hwid } = req.body;
 
@@ -74,9 +68,6 @@ app.post('/login', handleLogin);
 app.post('/api/login', handleLogin);
 app.post('/api/verify', handleLogin);
 
-// ==========================================
-// 3. DISCORD BOT & BUTON YÖNETİMİ
-// ==========================================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -88,95 +79,121 @@ const client = new Client({
 client.once('ready', async () => {
     console.log(`🤖 Discord botu aktif edildi! Giriş: ${client.user.tag}`);
 
-    // Eğer komutları harici (commands klasöründen) okutuyorsan burayı silebilirsin. 
-    // Tek dosyada topladıysan /bedava-key buraya da eklenebilir.
+    const commands = [
+        new SlashCommandBuilder().setName('bedava-key').setDescription('Ücretsiz key paneli kurar.'),
+        new SlashCommandBuilder().setName('ozel-key').setDescription('Özel/Premium key paneli kurar.')
+    ].map(command => command.toJSON());
+
+    const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
+    try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('✨ Discord Slash komutları yüklendi.');
+    } catch (error) {
+        console.error('Komut yükleme hatası:', error);
+    }
 });
 
-// Buton ve Komut Etkileşimleri
+// Güvenli Komut İşleyicisi (Zaman aşımını önler)
 client.on('interactionCreate', async interaction => {
-    // 1) /bedava-key Komutu Çalıştırıldığında Paneli Gönderir
-    if (interaction.isChatInputCommand() && interaction.commandName === 'bedava-key') {
-        const embed = new EmbedBuilder()
-            .setColor('#2B2D31')
-            .setTitle('🚀 LUAPREMIUM • ÜCRETSİZ KEY PANELİ')
-            .setDescription(
-                '> 🎯 **Aşağıdaki butona basarak HWID kilitli ücretsiz keyini hemen alabilirsin!**\n\n' +
-                '➔ **Sistem İşleyişi:**\n' +
-                '   > 🔹 Butona tıkladığın anda sistem sana özel bir key oluşturur.\n' +
-                '   > 🔹 Key ve **Key ID** bilgin doğrudan **DM (Özel Mesaj)** kutuna gönderilir.\n' +
-                '   > 🔹 Key, giriş yaptığın ilk bilgisayara (HWID) güvenle kilitlenir.\n\n' +
-                '⚠️ *Not: Botun sana mesaj atabilmesi için DM kutunun açık olması gerekir.*'
-            )
-            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
-            .setFooter({ text: `${interaction.guild.name} • Güvenli Lisans Sistemi`, iconURL: interaction.client.user.displayAvatarURL() });
+    if (!interaction.isChatInputCommand()) return;
 
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('get_free_key')
-                    .setLabel('🎫 Hemen Ücretsiz Key Al')
-                    .setStyle(ButtonStyle.Success)
-            );
+    if (interaction.commandName === 'bedava-key' || interaction.commandName === 'ozel-key') {
+        try {
+            await interaction.deferReply({ ephemeral: true });
 
-        await interaction.reply({ content: '✅ Şık key paneli kanala başarıyla kuruldu!', ephemeral: true });
-        await interaction.channel.send({ embeds: [embed], components: [row] });
+            const isPremium = interaction.commandName === 'ozel-key';
+            const titleText = isPremium ? '🚀 LUAPREMIUM • ÖZEL / PREMIUM KEY PANELİ' : '🚀 LUAPREMIUM • ÜCRETSİZ KEY PANELİ';
+            const customIdVal = isPremium ? 'get_premium_key' : 'get_free_key';
+
+            const embed = new EmbedBuilder()
+                .setColor(isPremium ? '#FFD700' : '#2B2D31')
+                .setTitle(titleText)
+                .setDescription(
+                    '> 🎯 **Aşağıdaki butona basarak HWID kilitli keyini hemen alabilirsin!**\n\n' +
+                    '➔ **Sistem İşleyişi:**\n' +
+                    '   > 🔹 Butona tıkladığın anda sistem sana özel bir key oluşturur.\n' +
+                    '   > 🔹 Key ve bilgilerin doğrudan **DM (Özel Mesaj)** kutuna gönderilir.\n' +
+                    '   > 🔹 Key, giriş yaptığın ilk bilgisayara (HWID) güvenle kilitlenir.\n\n' +
+                    '⚠️ *Not: Botun sana mesaj atabilmesi için DM kutunun açık olması gerekir.*'
+                )
+                .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+                .setFooter({ text: `${interaction.guild.name} • Güvenli Lisans Sistemi`, iconURL: interaction.client.user.displayAvatarURL() });
+
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(customIdVal)
+                        .setLabel(isPremium ? '💎 Hemen Premium Key Al' : '🎫 Hemen Ücretsiz Key Al')
+                        .setStyle(isPremium ? ButtonStyle.Success : ButtonStyle.Primary)
+                );
+
+            await interaction.channel.send({ embeds: [embed], components: [row] });
+            await interaction.editReply({ content: '✅ Şık key paneli kanala başarıyla kuruldu!' });
+        } catch (err) {
+            console.error(err);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ Bir hata oluştu!', ephemeral: true }).catch(() => {});
+            } else {
+                await interaction.editReply({ content: '❌ Komut işlenirken bir hata oluştu!' }).catch(() => {});
+            }
+        }
         return;
     }
+});
 
-    // 2) Kullanıcı "Hemen Ücretsiz Key Al" Butonuna Bastığında
-    if (interaction.isButton() && interaction.customId === 'get_free_key') {
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+    if (interaction.customId !== 'get_free_key' && interaction.customId !== 'get_premium_key') return;
+
+    try {
         await interaction.deferReply({ ephemeral: true });
         const discordId = interaction.user.id;
+        const planType = interaction.customId === 'get_premium_key' ? 'premium' : 'free';
 
-        try {
-            // Kullanıcının daha önce key alıp almadığını kontrol et (1 kez hakkı var)
-            let user = await UserModel.findOne({ discordId: discordId });
+        let user = await UserModel.findOne({ discordId: discordId });
 
-            if (user) {
-                // Zaten varsa mevcut keyini tekrar DM at
-                const existingEmbed = new EmbedBuilder()
-                    .setTitle("🔑 Zaten Bir Keyin Bulunuyor!")
-                    .setDescription(`Daha önce oluşturduğun bilgiler aşağıdadır:\n\n👤 **Kullanıcı Adı:** \`${user.username}\`\n🔑 **Key (Şifre):** \`${user.password}\`\n📌 **Plan:** \`${user.plan}\``)
-                    .setColor(0xFFA500)
-                    .setTimestamp();
-
-                try {
-                    await interaction.user.send({ embeds: [existingEmbed] });
-                    await interaction.editReply({ content: "⚠️ Sistemde kayıtlı bir keyin zaten var! Bilgilerin özel mesaj (DM) olarak tekrar gönderildi." });
-                } catch (dmErr) {
-                    await interaction.editReply({ content: "⚠️ Zaten kayıtlı bir keyin var ancak DM kutun kapalı! Bilgilerin:", embeds: [existingEmbed] });
-                }
-                return;
-            }
-
-            // Yeni Free Key Oluştur ve Kaydet
-            const username = "luas";
-            const password = "Luas-" + generateRandomString(6);
-            
-            user = new UserModel({
-                username: username,
-                password: password,
-                plan: "free",
-                discordId: discordId
-            });
-            await user.save();
-
-            const newEmbed = new EmbedBuilder()
-                .setTitle("🔑 Ücretsiz Key'in Başarıyla Oluşturuldu!")
-                .setDescription(`Giriş bilgileriniz aşağıdadır:\n\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key (Şifre):** \`${password}\`\n📌 **Plan:** \`free\``)
-                .setColor(0x00A0FF)
+        if (user) {
+            const existingEmbed = new EmbedBuilder()
+                .setTitle("🔑 Zaten Bir Keyin Bulunuyor!")
+                .setDescription(`Daha önce oluşturduğun bilgiler aşağıdadır:\n\n👤 **Kullanıcı Adı:** \`${user.username}\`\n🔑 **Key (Şifre):** \`${user.password}\`\n📌 **Plan:** \`${user.plan}\``)
+                .setColor(0xFFA500)
                 .setTimestamp();
 
             try {
-                await interaction.user.send({ embeds: [newEmbed] });
-                await interaction.editReply({ content: "✅ Ücretsiz key'in başarıyla oluşturuldu ve özel mesaj (DM) olarak gönderildi!" });
-            } catch (dmError) {
-                await interaction.editReply({ content: "⚠️ Key oluşturuldu ancak DM kutun kapalı olduğu için buradan paylaşıldı:", embeds: [newEmbed] });
+                await interaction.user.send({ embeds: [existingEmbed] });
+                await interaction.editReply({ content: "⚠️ Sistemde kayıtlı bir keyin zaten var! Bilgilerin özel mesaj (DM) olarak tekrar gönderildi." });
+            } catch (dmErr) {
+                await interaction.editReply({ content: "⚠️ Zaten kayıtlı bir keyin var ancak DM kutun kapalı! Bilgilerin:", embeds: [existingEmbed] });
             }
-        } catch (err) {
-            console.error(err);
-            await interaction.editReply({ content: "❌ İşlem sırasında bir veritabanı hatası oluştu!" });
+            return;
         }
+
+        const username = "luas";
+        const password = "Luas-" + generateRandomString(6);
+        
+        user = new UserModel({
+            username: username,
+            password: password,
+            plan: planType,
+            discordId: discordId
+        });
+        await user.save();
+
+        const newEmbed = new EmbedBuilder()
+            .setTitle("🔑 Key'in Başarıyla Oluşturuldu!")
+            .setDescription(`Giriş bilgileriniz aşağıdadır:\n\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key (Şifre):** \`${password}\`\n📌 **Plan:** \`${planType}\``)
+            .setColor(0x00A0FF)
+            .setTimestamp();
+
+        try {
+            await interaction.user.send({ embeds: [newEmbed] });
+            await interaction.editReply({ content: "✅ Key'in başarıyla oluşturuldu ve özel mesaj (DM) olarak gönderildi!" });
+        } catch (dmError) {
+            await interaction.editReply({ content: "⚠️ Key oluşturuldu ancak DM kutun kapalı olduğu için buradan paylaşıldı:", embeds: [newEmbed] });
+        }
+    } catch (err) {
+        console.error(err);
+        await interaction.editReply({ content: "❌ İşlem sırasında bir veritabanı hatası oluştu!" });
     }
 });
 
