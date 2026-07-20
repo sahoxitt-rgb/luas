@@ -1,17 +1,21 @@
+require('dotenv').config(); // .env dosyasını okuması için en üste ekledik
+
 const express = require('express');
 const mongoose = require('mongoose');
-const app = express();
+const { Client, GatewayIntentBits } = require('discord.js');
 
+const app = express();
 app.use(express.json());
 
-// MongoDB Bağlantı Adresi
+// ==========================================
+// 1. MONGODB BAĞLANTISI VE ŞEMA
+// ==========================================
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://luas:luasorj@cluster0.i2qdv7n.mongodb.net/?appName=Cluster0";
 
 mongoose.connect(MONGO_URI)
     .then(() => console.log("MongoDB bağlantısı başarılı!"))
     .catch(err => console.error("MongoDB bağlantı hatası:", err));
 
-// Kullanıcı / Key Şeması (HWID Alanı Eklendi)
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true },
     password: { type: String, required: true },
@@ -20,7 +24,6 @@ const UserSchema = new mongoose.Schema({
 });
 const UserModel = mongoose.model('User', UserSchema);
 
-// Rastgele 6 karakter üreten fonksiyon
 function generateRandomString(length) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
@@ -30,7 +33,9 @@ function generateRandomString(length) {
     return result;
 }
 
-// 1. KEY OLUŞTURMA ENDPOINT'İ
+// ==========================================
+// 2. EXPRESS API (ROBLOX KÖPRÜSÜ)
+// ==========================================
 app.post('/api/create-key', async (req, res) => {
     try {
         const { planType } = req.body;
@@ -58,7 +63,6 @@ app.post('/api/create-key', async (req, res) => {
     }
 });
 
-// 2. GİRİŞ / DOĞRULAMA ENDPOINT'İ (HWID Korumalı)
 app.post('/api/verify', async (req, res) => {
     const { username, password, hwid } = req.body;
 
@@ -73,14 +77,11 @@ app.post('/api/verify', async (req, res) => {
             return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
         }
 
-        // HWID Kontrolü ve Kilitleme
         if (hwid) {
             if (!user.hwid) {
-                // Key ilk defa kullanılıyor, bu cihaza kilitle
                 user.hwid = hwid;
                 await user.save();
             } else if (user.hwid !== hwid) {
-                // Başka bir cihaza aitse girişine izin verme
                 return res.json({ success: false, message: "Bu key başka bir cihaza (HWID) kayıtlı!" });
             }
         }
@@ -95,8 +96,44 @@ app.post('/api/verify', async (req, res) => {
     }
 });
 
-// Sunucuyu başlatma
+// ==========================================
+// 3. DISCORD BOT BAĞLANTISI
+// ==========================================
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+// Bot aktif olduğunda loga yazdır
+client.once('ready', () => {
+    console.log(`🤖 Discord botu başarıyla aktif edildi! Giriş yapılan hesap: ${client.user.tag}`);
+});
+
+// Örnek bir komut: Discord'dan bota "!ping" yazarsan cevap verir (Çalıştığını test etmek için)
+client.on('messageCreate', (message) => {
+    if (message.author.bot) return;
+
+    if (message.content === '!ping') {
+        message.reply('Pong! Bot sorunsuz çalışıyor 🏓');
+    }
+});
+
+// Ortamdan (Environment) BOT_TOKEN'ı çekip giriş yaptırma
+if (!process.env.BOT_TOKEN) {
+    console.error("⛔ HATA: BOT_TOKEN bulunamadı! .env dosyasını veya Render Environment Variables kısmını kontrol et.");
+} else {
+    client.login(process.env.BOT_TOKEN).catch(err => {
+        console.error("⛔ Discord'a bağlanırken hata oluştu (Token yanlış veya Intent'ler kapalı olabilir):", err);
+    });
+}
+
+// ==========================================
+// 4. SUNUCUYU BAŞLAT
+// ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Sunucu ${PORT} portunda çalışıyor.`);
+    console.log(`🌐 Web Sunucusu ${PORT} portunda çalışıyor.`);
 });
