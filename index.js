@@ -4,22 +4,23 @@ const app = express();
 
 app.use(express.json());
 
-// MongoDB Bağlantı Adresi (Render'da Environment Variables kısmına MONGO_URI ekleyebilirsin)
+// MongoDB Bağlantı Adresi
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://luas:luasorj@cluster0.i2qdv7n.mongodb.net/?appName=Cluster0";
 
 mongoose.connect(MONGO_URI)
     .then(() => console.log("MongoDB bağlantısı başarılı!"))
     .catch(err => console.error("MongoDB bağlantı hatası:", err));
 
-// Kullanıcı / Key Şeması
+// Kullanıcı / Key Şeması (HWID Alanı Eklendi)
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true },
     password: { type: String, required: true },
+    hwid: { type: String, default: null }, // İlk giren cihaza kilitlenir
     plan: { type: String, default: "free" } // "free" veya "premium"
 });
 const UserModel = mongoose.model('User', UserSchema);
- 
-// Rastgele 6 karakter üreten fonksiyon (Harf ve Rakam karışık)
+
+// Rastgele 6 karakter üreten fonksiyon
 function generateRandomString(length) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
@@ -29,13 +30,13 @@ function generateRandomString(length) {
     return result;
 }
 
-// 1. KEY OLUŞTURMA ENDPOINT'İ (Kullanıcı adı sabit: luas, Şifre: Luas-XXXXXX)
+// 1. KEY OLUŞTURMA ENDPOINT'İ
 app.post('/api/create-key', async (req, res) => {
     try {
-        const { planType } = req.body; // İsteğe bağlı 'free' veya 'premium' gönderebilirsin
-        const username = "luas"; // Kullanıcı adı her zaman sabit
-        const randomPart = generateRandomString(6); // 6 rastgele karakter
-        const password = "Luas-" + randomPart; // Örn: Luas-A9x2K1
+        const { planType } = req.body;
+        const username = "luas"; 
+        const randomPart = generateRandomString(6); 
+        const password = "Luas-" + randomPart; 
         
         const newKey = new UserModel({
             username: username,
@@ -57,7 +58,7 @@ app.post('/api/create-key', async (req, res) => {
     }
 });
 
-// 2. GİRİŞ / DOĞRULAMA ENDPOINT'İ (Roblox UI'dan gelen isteği MongoDB'de arayan kısım)
+// 2. GİRİŞ / DOĞRULAMA ENDPOINT'İ (HWID Korumalı)
 app.post('/api/verify', async (req, res) => {
     const { username, password, hwid } = req.body;
 
@@ -66,21 +67,29 @@ app.post('/api/verify', async (req, res) => {
     }
 
     try {
-        // MongoDB'de kullanıcı adı ve şifreyi aratıyoruz
         const user = await UserModel.findOne({ username: username, password: password });
 
-        if (user) {
-            res.json({
-                success: true,
-                message: "Giriş başarılı!",
-                plan: user.plan // 'free' veya 'premium' döner
-            });
-        } else {
-            res.json({
-                success: false,
-                message: "Geçersiz kullanıcı adı veya şifre!"
-            });
+        if (!user) {
+            return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
         }
+
+        // HWID Kontrolü ve Kilitleme
+        if (hwid) {
+            if (!user.hwid) {
+                // Key ilk defa kullanılıyor, bu cihaza kilitle
+                user.hwid = hwid;
+                await user.save();
+            } else if (user.hwid !== hwid) {
+                // Başka bir cihaza aitse girişine izin verme
+                return res.json({ success: false, message: "Bu key başka bir cihaza (HWID) kayıtlı!" });
+            }
+        }
+
+        res.json({
+            success: true,
+            message: "Giriş başarılı!",
+            plan: user.plan
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: "Veritabanı hatası!" });
     }
@@ -90,4 +99,4 @@ app.post('/api/verify', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Sunucu ${PORT} portunda çalışıyor.`);
-}); 
+});
