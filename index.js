@@ -15,12 +15,13 @@ app.use(express.json());
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://luas:luasorj@cluster0.i2qdv7n.mongodb.net/?appName=Cluster0";
 
 mongoose.connect(MONGO_URI)
-    .then(() => console.log("MongoDB bağlantısı başarılı!"))
-    .catch(err => console.error("MongoDB bağlantı hatası:", err));
+    .then(() => console.log("✅ MongoDB bağlantısı başarılı!"))
+    .catch(err => console.error("⛔ MongoDB bağlantı hatası:", err));
 
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true },
     password: { type: String, required: true },
+    keyId: { type: String, required: true, unique: true }, // YENİ: Benzersiz Key ID
     hwid: { type: String, default: null },
     plan: { type: String, default: "free" },
     duration: { type: String, default: "Sınırsız" },
@@ -101,7 +102,6 @@ client.once('ready', async () => {
     }
 });
 
-// Komut ve Etkileşim Yönlendiricisi
 client.on('interactionCreate', async interaction => {
     // 1) Slash Komutları
     if (interaction.isChatInputCommand()) {
@@ -111,25 +111,24 @@ client.on('interactionCreate', async interaction => {
             await command.execute(interaction);
         } catch (error) {
             console.error(error);
-            if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ content: '❌ Komut çalıştırılırken bir hata oluştu!' }).catch(() => {});
-            } else {
-                await interaction.reply({ content: '❌ Komut çalıştırılırken bir hata oluştu!', ephemeral: true }).catch(() => {});
-            }
+            const replyObj = { content: '❌ Komut çalıştırılırken bir hata oluştu!', ephemeral: true };
+            if (interaction.deferred || interaction.replied) await interaction.editReply(replyObj).catch(() => {});
+            else await interaction.reply(replyObj).catch(() => {});
         }
         return;
     }
 
     // 2) Buton Etkileşimleri
     if (interaction.isButton()) {
-        const command = client.commands.get(interaction.message.interaction?.commandName) || client.commands.get(interaction.customId.includes('free') ? 'bedava-key' : 'ozel-key');
+        const commandName = interaction.customId.includes('free') ? 'bedava-key' : 'ozel-key';
+        const command = client.commands.get(commandName);
         if (command && typeof command.handleButton === 'function') {
             await command.handleButton(interaction, UserModel);
         }
         return;
     }
 
-    // 3) Modal (Form) Gönderimleri
+    // 3) Modal (Form) Gönderimleri (Özel Key)
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
@@ -144,9 +143,13 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
+                // YENİ: Premium için Key ID Oluşturma
+                const uniqueKeyId = "KID-PREM-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
                 const newUser = new UserModel({
                     username: username,
                     password: password,
+                    keyId: uniqueKeyId,
                     plan: "premium",
                     duration: duration,
                     discordId: interaction.user.id
@@ -154,7 +157,7 @@ client.on('interactionCreate', async interaction => {
                 await newUser.save();
 
                 await interaction.editReply({ 
-                    content: `✅ **Özel Key Başarıyla Oluşturuldu ve Veritabanına Kaydedildi!**\n\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key:** \`${password}\`\n⏳ **Süre:** \`${duration}\`` 
+                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key:** \`${password}\`\n⏳ **Süre:** \`${duration}\`\n\n*Not: HWID sıfırlamak için Key ID'yi kullanın.*` 
                 });
             } catch (err) {
                 console.error(err);
