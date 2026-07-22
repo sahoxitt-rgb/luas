@@ -26,15 +26,18 @@ const UserSchema = new mongoose.Schema({
     plan: { type: String, default: "free" },
     duration: { type: String, default: "Sınırsız" },
     discordId: { type: String, default: null },
-    creatorTag: { type: String, default: "Sistem / Bilinmiyor" } // Oluşturan yetkilinin tagı
+    creatorTag: { type: String, default: "Sistem / Bilinmiyor" }
 });
 const UserModel = mongoose.model('User', UserSchema);
 
 // ==========================================
-// EXPRESS API (ROBLOX / GİRİŞ KÖPRÜSÜ)
+// EXPRESS API (ROBLOX / GİRİŞ KÖPRÜSÜ & HWID)
 // ==========================================
 const handleLogin = async (req, res) => {
-    const { username, password, hwid } = req.body;
+    // Roblox tarafından gelebilecek olası farklı parametre isimlerini de yakalıyoruz
+    const username = req.body.username || req.body.kullanici;
+    const password = req.body.password || req.body.key || req.body.sifre;
+    const hwid = req.body.hwid || req.body.HID || req.body.hardwareId;
 
     if (!username || !password) {
         return res.json({ success: false, message: "Kullanıcı adı veya şifre boş bırakılamaz!" });
@@ -47,8 +50,9 @@ const handleLogin = async (req, res) => {
             return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
         }
 
-        if (hwid) {
-            if (!user.hwid) {
+        // HWID Kontrolü ve Ataması
+        if (hwid && hwid !== "" && hwid !== "nil") {
+            if (!user.hwid || user.hwid === "" || user.hwid === "null") {
                 user.hwid = hwid;
                 await user.save();
             } else if (user.hwid !== hwid) {
@@ -62,6 +66,7 @@ const handleLogin = async (req, res) => {
             plan: user.plan
         });
     } catch (error) {
+        console.error("API Giriş Hatası:", error);
         res.status(500).json({ success: false, message: "Veritabanı hatası!" });
     }
 };
@@ -150,7 +155,7 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
-                // Sadece 5 haneli saf rakam ID üretimi
+                // 5 haneli saf rakam ID üretimi
                 const uniqueKeyId = Math.floor(10000 + Math.random() * 90000).toString();
 
                 const newUser = new UserModel({
@@ -160,7 +165,7 @@ client.on('interactionCreate', async interaction => {
                     plan: "premium",
                     duration: duration,
                     discordId: interaction.user.id,
-                    creatorTag: interaction.user.tag // Komutu kullanan yetkilinin tagı
+                    creatorTag: interaction.user.tag
                 });
                 await newUser.save();
 

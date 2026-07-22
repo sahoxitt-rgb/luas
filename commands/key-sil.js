@@ -28,7 +28,7 @@ async function sendDeletePanel(interaction, statusMessage = null) {
 
         const options = keys.map((key, index) => {
             return {
-                label: `${index + 1}. ${key.username} (${key.keyId})`.substring(0, 100),
+                label: `${index + 1}. ${key.username} (ID: ${key.keyId})`.substring(0, 100),
                 description: `Key: ${key.password} | Plan: ${key.plan.toUpperCase()}`.substring(0, 100),
                 value: key._id.toString()
             };
@@ -50,7 +50,7 @@ async function sendDeletePanel(interaction, statusMessage = null) {
 
         const collector = response.createMessageComponentCollector({ 
             componentType: ComponentType.StringSelect, 
-            time: 120000, // 2 dakika aktif kalır
+            time: 120000,
             filter: i => i.user.id === interaction.user.id
         });
 
