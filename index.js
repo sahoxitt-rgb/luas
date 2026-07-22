@@ -25,7 +25,8 @@ const UserSchema = new mongoose.Schema({
     hwid: { type: String, default: null },
     plan: { type: String, default: "free" },
     duration: { type: String, default: "Sınırsız" },
-    discordId: { type: String, default: null }
+    discordId: { type: String, default: null },
+    creatorTag: { type: String, default: "Sistem / Bilinmiyor" } // Oluşturan yetkilinin tagı
 });
 const UserModel = mongoose.model('User', UserSchema);
 
@@ -112,7 +113,6 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    // 1) Slash Komutları
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -127,7 +127,6 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 2) Buton Etkileşimleri
     if (interaction.isButton()) {
         const commandName = interaction.customId.includes('free') ? 'bedava-key' : 'ozel-key';
         const command = client.commands.get(commandName);
@@ -137,7 +136,6 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 3) Modal Gönderimleri (Özel Key Oluşturma - 5 Haneli Rastgele ID)
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
@@ -152,8 +150,8 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
-                // 5 haneli rastgele harf/sayı karışık Key ID
-                const uniqueKeyId = "KID-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+                // Sadece 5 haneli saf rakam ID üretimi
+                const uniqueKeyId = Math.floor(10000 + Math.random() * 90000).toString();
 
                 const newUser = new UserModel({
                     username: username,
@@ -161,7 +159,8 @@ client.on('interactionCreate', async interaction => {
                     keyId: uniqueKeyId,
                     plan: "premium",
                     duration: duration,
-                    discordId: interaction.user.id
+                    discordId: interaction.user.id,
+                    creatorTag: interaction.user.tag // Komutu kullanan yetkilinin tagı
                 });
                 await newUser.save();
 
