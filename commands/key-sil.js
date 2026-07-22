@@ -9,9 +9,9 @@ module.exports = {
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
-        const UserModel = mongoose.model('User');
         
         try {
+            const UserModel = mongoose.models.User || mongoose.model('User');
             const keys = await UserModel.find().sort({ _id: -1 }).limit(25);
             
             if (keys.length === 0) {
@@ -19,10 +19,13 @@ module.exports = {
             }
 
             const options = keys.map((key, index) => {
+                const labelText = `${index + 1}. ${key.username || 'İsimsiz'} - ${key.plan ? key.plan.toUpperCase() : 'FREE'}`;
+                const descText = `ID: ${key.keyId || 'Yok'} | Şifre: ${key.password || 'Yok'}`;
+                
                 return {
-                    label: `${index + 1}. ${key.username} - ${key.plan.toUpperCase()}`,
-                    description: `ID: ${key.keyId} | Süre: ${key.duration}`,
-                    value: key.keyId
+                    label: labelText.substring(0, 100),
+                    description: descText.substring(0, 100),
+                    value: key._id.toString()
                 };
             });
 
@@ -36,7 +39,7 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setColor('#FF0000')
                 .setTitle('🗑️ Luas Key Silme Paneli')
-                .setDescription('Aşağıdaki menüyü kullanarak veritabanından silmek istediğiniz lisansı seçin.\n\n*⚠️ Sadece en yeni 25 key listelenmektedir.*');
+                .setDescription('Aşağıdaki menüyü kullanarak veritabanından silmek istediğiniz lisansı seçin.');
 
             const response = await interaction.editReply({ embeds: [embed], components: [row] });
 
@@ -48,14 +51,14 @@ module.exports = {
 
             collector.on('collect', async i => {
                 if (i.customId === 'select_key_to_delete') {
-                    const selectedKeyId = i.values[0];
-                    const deletedUser = await UserModel.findOneAndDelete({ keyId: selectedKeyId });
+                    const selectedMongoId = i.values[0];
+                    const deletedUser = await UserModel.findByIdAndDelete(selectedMongoId);
                     
                     if (deletedUser) {
                         const successEmbed = new EmbedBuilder()
                             .setColor('#00FF00')
                             .setTitle('✅ Başarıyla Silindi!')
-                            .setDescription(`🆔 **ID:** \`${deletedUser.keyId}\`\n👤 **Kullanıcı:** \`${deletedUser.username}\``);
+                            .setDescription(`🆔 **Key ID:** \`${deletedUser.keyId || 'Yok'}\`\n👤 **Kullanıcı:** \`${deletedUser.username}\``);
                         
                         await i.update({ embeds: [successEmbed], components: [] });
                     } else {
@@ -64,8 +67,8 @@ module.exports = {
                 }
             });
         } catch (error) {
-            console.error(error);
-            interaction.editReply({ content: '❌ Veritabanı hatası oluştu!' });
+            console.error("Key silme hatası:", error);
+            await interaction.editReply({ content: `❌ Veritabanı hatası oluştu! Detay: \`${error.message}\`` });
         }
     }
 };
