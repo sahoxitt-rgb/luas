@@ -4,25 +4,33 @@ const mongoose = require('mongoose');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('key-sorgula')
-        .setDescription('Key ID kullanarak o keyin kime ait olduğunu ve detaylarını gösterir.')
+        .setDescription('Key ID veya doğrudan Key/Şifre ile detayları sorgular.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addStringOption(option =>
-            option.setName('keyid')
-                .setDescription('Sorgulamak istediğiniz Key ID (Örn: KID-PREM-XXXXXX)')
+            option.setName('sorgu')
+                .setDescription('Key ID veya Key (Şifre) girin')
                 .setRequired(true)),
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
-        const searchKeyId = interaction.options.getString('keyid').trim();
+        const query = interaction.options.getString('sorgu').trim();
 
         try {
             const UserModel = mongoose.models.User || mongoose.model('User');
-            const targetUser = await UserModel.findOne({ keyId: searchKeyId });
+            
+            // Hem Key ID hem de Şifre (password) alanında arama yapar
+            const targetUser = await UserModel.findOne({
+                $or: [
+                    { keyId: query },
+                    { password: query },
+                    { username: query }
+                ]
+            });
 
             if (!targetUser) {
                 return interaction.editReply({ 
-                    content: `❌ \`${searchKeyIdunas}\` ID'sine sahip bir key veritabanında bulunamadı!` 
+                    content: `❌ \`${query}\` ile eşleşen bir kayıt veritabanında bulunamadı!` 
                 });
             }
 
@@ -31,12 +39,12 @@ module.exports = {
                 .setTitle('🔍 Key Sorgulama Sonucu')
                 .addFields(
                     { name: '👤 Kullanıcı Adı', value: `\`${targetUser.username}\``, inline: true },
-                    { name: '🔑 Şifre / Key', value: `\`${targetUser.password}\``, inline: true },
-                    { name: '🆔 Key ID', value: `\`${targetUser.keyId}\``, inline: false },
+                    { name: '🔑 Key / Şifre', value: `\`${targetUser.password}\``, inline: true },
+                    { name: '🆔 Key ID', value: `\`${targetUser.keyId || 'Yok'}\``, inline: false },
                     { name: '📦 Paket / Plan', value: `\`${targetUser.plan ? targetUser.plan.toUpperCase() : 'FREE'}\``, inline: true },
                     { name: '⏳ Süre', value: `\`${targetUser.duration || 'Sınırsız'}\``, inline: true },
-                    { name: '💻 HWID Durumu', value: targetUser.hwid ? `\`Kayıtlı (${targetUser.hwid.substring(0, 10)}...)\`` : '`Boş (Kullanılmamış)`', inline: false },
-                    { name: 'discord ID', value: targetUser.discordId ? `<@${targetUser.discordId}>` : '`Bilinmiyor`', inline: true }
+                    { name: '💻 HWID Durumu', value: targetUser.hwid ? `\`Kayıtlı: ${targetUser.hwid}\`` : '`Boş (Kullanılmamış)`', inline: false },
+                    { name: 'Discord ID', value: targetUser.discordId ? `<@${targetUser.discordId}>` : '`Bilinmiyor`', inline: true }
                 )
                 .setTimestamp();
 

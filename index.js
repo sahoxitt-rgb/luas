@@ -97,11 +97,9 @@ client.once('ready', async () => {
     try {
         if (process.env.GUILD_ID) {
             console.log('🧹 Eski global ve guild komut kalıntıları tamamen temizleniyor...');
-            // Çift komutların kökünü kazımak için önce her iki tarafı da tamamen sıfırlıyoruz:
             await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
             await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [] });
             
-            // Ardından sadece tekil güncel komut dizisini sunucuya yüklüyoruz
             await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: commandArray });
             console.log('✨ Komutlar tertemiz bir şekilde sadece sunucuya yüklendi ve tekrarlar yok edildi!');
         } else {
@@ -139,7 +137,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 3) Modal Gönderimleri
+    // 3) Modal Gönderimleri (Özel Key Oluşturma - 5 Haneli Rastgele ID)
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
@@ -154,7 +152,8 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
-                const uniqueKeyId = "KID-PREM-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                // 5 haneli rastgele harf/sayı karışık Key ID
+                const uniqueKeyId = "KID-" + Math.random().toString(36).substring(2, 7).toUpperCase();
 
                 const newUser = new UserModel({
                     username: username,
@@ -167,7 +166,7 @@ client.on('interactionCreate', async interaction => {
                 await newUser.save();
 
                 await interaction.editReply({ 
-                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı:** \`${username}\`` 
+                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı:** \`${username}\`\n🔑 **Key:** \`${password}\`` 
                 });
             } catch (err) {
                 console.error(err);
