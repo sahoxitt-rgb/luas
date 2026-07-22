@@ -96,10 +96,14 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
         if (process.env.GUILD_ID) {
-            console.log('🔄 Eski global komutlar temizleniyor...');
+            console.log('🧹 Eski global ve guild komut kalıntıları tamamen temizleniyor...');
+            // Çift komutların kökünü kazımak için önce her iki tarafı da tamamen sıfırlıyoruz:
             await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
+            await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [] });
+            
+            // Ardından sadece tekil güncel komut dizisini sunucuya yüklüyoruz
             await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: commandArray });
-            console.log('✨ Komutlar sadece bu sunucuya yüklendi (Tekrarlar engellendi)!');
+            console.log('✨ Komutlar tertemiz bir şekilde sadece sunucuya yüklendi ve tekrarlar yok edildi!');
         } else {
             await rest.put(Routes.applicationCommands(client.user.id), { body: commandArray });
             console.log('✨ Slash komutları global olarak yüklendi.');
