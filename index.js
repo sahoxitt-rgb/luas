@@ -95,22 +95,17 @@ client.once('ready', async () => {
 
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
-        // ÇİFT KOMUT GÖRÜNMESİNİ ENGELLEYEN AKILLI SİSTEM
         if (process.env.GUILD_ID) {
-            console.log('🔄 Eski global komut kalıntıları temizleniyor...');
-            // Önce eski global komutların tamamını sıfırlıyoruz ki sunucu komutlarıyla çakışıp çiftlemesin
+            console.log('🔄 Eski global komutlar temizleniyor...');
             await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
-            
-            // Komutları doğrudan test ettiğin sunucuya yüklüyoruz (Böylece değişiklikler anında yansır)
             await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: commandArray });
-            console.log('✨ Komutlar SUNUCUYA özel olarak yüklendi ve tekrarlar temizlendi!');
+            console.log('✨ Komutlar sadece bu sunucuya yüklendi (Tekrarlar engellendi)!');
         } else {
-            // Eğer .env dosyasında GUILD_ID yoksa mecburen global yükler (Discord yansıması 1 saati bulabilir)
             await rest.put(Routes.applicationCommands(client.user.id), { body: commandArray });
-            console.log('✨ Slash komutları GLOBAL olarak yüklendi. (Not: Değişikliklerin sunucunuza gelmesi biraz zaman alabilir)');
+            console.log('✨ Slash komutları global olarak yüklendi.');
         }
     } catch (error) {
-        console.error("⛔ Komut pushlanırken hata oluştu:", error);
+        console.error("⛔ Komut yükleme hatası:", error);
     }
 });
 
@@ -130,7 +125,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 2) Buton Etkileşimleri (Bedava veya Özel Key İstekleri)
+    // 2) Buton Etkileşimleri
     if (interaction.isButton()) {
         const commandName = interaction.customId.includes('free') ? 'bedava-key' : 'ozel-key';
         const command = client.commands.get(commandName);
@@ -140,7 +135,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 3) Modal (Form) Gönderimleri (Özel Premium Key Oluşturma)
+    // 3) Modal Gönderimleri
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
@@ -155,7 +150,6 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
-                // Premium için benzersiz harf ve sayı karışık Key ID oluşturma
                 const uniqueKeyId = "KID-PREM-" + Math.random().toString(36).substring(2, 8).toUpperCase();
 
                 const newUser = new UserModel({
@@ -169,7 +163,7 @@ client.on('interactionCreate', async interaction => {
                 await newUser.save();
 
                 await interaction.editReply({ 
-                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key:** \`${password}\`\n⏳ **Süre:** \`${duration}\`\n\n*Not: HWID sıfırlamak veya key silmek için bu Key ID'yi kullanın.*` 
+                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı:** \`${username}\`` 
                 });
             } catch (err) {
                 console.error(err);
