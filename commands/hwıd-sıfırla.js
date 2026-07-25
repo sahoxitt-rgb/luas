@@ -8,12 +8,12 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addStringOption(option =>
             option.setName('key_id')
-                .setDescription('Sıfırlanacak keyin ID si (Örn: KID-PREM-A1B2C3)')
+                .setDescription('Sıfırlanacak keyin ID si (Örn: 123456)')
                 .setRequired(true)),
 
     async execute(interaction) {
         const keyIdInput = interaction.options.getString('key_id').trim();
-        const UserModel = mongoose.model('User'); // index.js'deki modeli kullanıyoruz
+        const UserModel = mongoose.model('User');
 
         const userData = await UserModel.findOne({ keyId: keyIdInput });
 

@@ -13,7 +13,7 @@ module.exports = {
             .setColor('#2B2D31')
             .setTitle('🟢 LUAS • ÜCRETSİZ ERİŞİM PANELİ')
             .setDescription('Aşağıdaki butona tıklayarak ücretsiz versiyon için anında key alabilirsin.\n\n✨ **Özellikler:**\n• Temel özelliklere erişim\n• Reklamlı sürüm\n• Sınırsız kullanım süresi')
-            .setImage('https://i.imgur.com/Line.png') // İsteğe bağlı şık bir çizgi eklenebilir
+            .setImage('https://i.imgur.com/Line.png') // İsteğe bağlı
             .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
             .setFooter({ text: `${interaction.guild.name} • Otomatik Teslimat Sistemi`, iconURL: interaction.guild.iconURL() });
 
@@ -38,8 +38,10 @@ module.exports = {
                 return interaction.editReply({ content: `⚠️ **Zaten aktif bir ücretsiz keyin bulunuyor!**\n\n🆔 **Key ID:** \`${existingUser.keyId}\`\n👤 **Kullanıcı Adı:** \`${existingUser.username}\`\n🔑 **Key:** \`${existingUser.password}\`` });
             }
 
-            const uniqueKeyId = "KID-FREE-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-            const password = "Luas-" + Math.random().toString(36).substring(2, 8);
+            // LUAS-FREE-XXXXXX Formatında (6 Rastgele Harf)
+            const randomLetters = Array.from({length: 6}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+            const password = `LUAS-FREE-${randomLetters}`;
+            const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString(); // 6 Haneli Sayısal ID
             
             const newUser = new UserModel({
                 username: "luas",
@@ -50,6 +52,20 @@ module.exports = {
                 discordId: interaction.user.id
             });
             await newUser.save();
+
+            // === LOG SİSTEMİ BAŞLANGICI ===
+            const logChannelId = process.env.LOG_CHANNEL_ID;
+            if (logChannelId) {
+                const logChannel = interaction.client.channels.cache.get(logChannelId);
+                if (logChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setColor('#2B2D31')
+                        .setTitle('Free Key Oluşturuldu')
+                        .setDescription(`🗝️ **Free Key -->** \`${password}\`\n🆔 **Free Key ID -->** \`${uniqueKeyId}\`\n🪄 **Free Key'i Oluşturan Kişi -->** <@${interaction.user.id}>\n👑 **Free Key Sahibi -->** <@${interaction.user.id}>\n📝 **Free Key'in Oluşturulma Sebebi -->** Free Key\n⏰ **Free Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n⏱️ **Free Key'in Bitiş Zamanı -->** \`Sınırsız\`\n\n❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``);
+                    await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+                }
+            }
+            // === LOG SİSTEMİ BİTİŞİ ===
 
             const dmEmbed = new EmbedBuilder()
                 .setTitle("🎉 Ücretsiz Keyin Hazır!")

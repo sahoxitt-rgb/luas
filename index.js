@@ -4,7 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
-const { Client, GatewayIntentBits, REST, Routes, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder } = require('discord.js');
 
 const app = express();
 app.use(express.json());
@@ -34,7 +34,6 @@ const UserModel = mongoose.model('User', UserSchema);
 // EXPRESS API (ROBLOX / GİRİŞ KÖPRÜSÜ & HWID)
 // ==========================================
 const handleLogin = async (req, res) => {
-    // Roblox tarafından gelebilecek olası farklı parametre isimlerini de yakalıyoruz
     const username = req.body.username || req.body.kullanici;
     const password = req.body.password || req.body.key || req.body.sifre;
     const hwid = req.body.hwid || req.body.HID || req.body.hardwareId;
@@ -50,7 +49,7 @@ const handleLogin = async (req, res) => {
             return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
         }
 
-        // HWID Kontrolü ve Ataması
+        // HWID Kontrolü
         if (hwid && hwid !== "" && hwid !== "nil") {
             if (!user.hwid || user.hwid === "" || user.hwid === "null") {
                 user.hwid = hwid;
@@ -155,8 +154,7 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
-                // 5 haneli saf rakam ID üretimi
-                const uniqueKeyId = Math.floor(10000 + Math.random() * 90000).toString();
+                const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
 
                 const newUser = new UserModel({
                     username: username,
@@ -169,8 +167,34 @@ client.on('interactionCreate', async interaction => {
                 });
                 await newUser.save();
 
+                // === LOG SİSTEMİ BAŞLANGICI ===
+                const logChannelId = process.env.LOG_CHANNEL_ID;
+                if (logChannelId) {
+                    const logChannel = interaction.client.channels.cache.get(logChannelId);
+                    if (logChannel) {
+                        const logEmbed = new EmbedBuilder()
+                            .setColor('#2B2D31')
+                            .setTitle('Özel Key Oluşturuldu')
+                            .setDescription(`🗝️ **Özel Key -->** \`${password}\`
+🆔 **Özel Key ID -->** \`${uniqueKeyId}\`
+🪄 **Özel Key'i Oluşturan Kişi -->** <@${interaction.user.id}>
+👑 **Özel Key Sahibi -->** \`${username}\`
+📝 **Özel Key'in Oluşturulma Sebebi -->** Premium Erişim
+⏰ **Özel Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>
+⏱️ **Özel Key'in Bitiş Zamanı -->** \`${duration}\`
+
+❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``);
+                        await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+                    }
+                }
+                // === LOG SİSTEMİ BİTİŞİ ===
+
                 await interaction.editReply({ 
-                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı:** \`${username}\`\n🔑 **Key:** \`${password}\`` 
+                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**
+
+🆔 **Key ID:** \`${uniqueKeyId}\`
+👤 **Kullanıcı:** \`${username}\`
+🔑 **Key:** \`${password}\`` 
                 });
             } catch (err) {
                 console.error(err);

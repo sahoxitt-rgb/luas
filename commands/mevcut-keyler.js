@@ -26,7 +26,7 @@ module.exports = {
             keys.forEach((key, index) => {
                 embed.addFields({
                     name: `#${index + 1} | Kullanıcı: ${key.username}`,
-                    value: `🔑 **Key:** \`${key.password}\`\n🆔 **ID:** \`${key.keyId}\` | 🌟 **Plan:** \`${key.plan.toUpperCase()}\`\n💻 **HWID:** ${key.hwid ? '`Dolu`' : '`Boş`'} | 🛠️ **Oluşturan:** \`${key.creatorTag || 'Bilinmiyor'}\``,
+                    value: `🔑 **Key:** \`${key.password}\`\n🆔 **ID:** \`${key.keyId}\` | 🌟 **Plan:** \`${key.plan.toUpperCase()}\`\n💻 **HWID:** ${key.hwid ? '\`Dolu\`' : '\`Boş\`'} | 🛠️ **Oluşturan:** \`${key.creatorTag || 'Bilinmiyor'}\``,
                     inline: false
                 });
             });

@@ -19,7 +19,6 @@ module.exports = {
         try {
             const UserModel = mongoose.models.User || mongoose.model('User');
             
-            // Hem Key ID hem de Şifre (password) alanında arama yapar
             const targetUser = await UserModel.findOne({
                 $or: [
                     { keyId: query },
@@ -43,8 +42,8 @@ module.exports = {
                     { name: '🆔 Key ID', value: `\`${targetUser.keyId || 'Yok'}\``, inline: false },
                     { name: '📦 Paket / Plan', value: `\`${targetUser.plan ? targetUser.plan.toUpperCase() : 'FREE'}\``, inline: true },
                     { name: '⏳ Süre', value: `\`${targetUser.duration || 'Sınırsız'}\``, inline: true },
-                    { name: '💻 HWID Durumu', value: targetUser.hwid ? `\`Kayıtlı: ${targetUser.hwid}\`` : '`Boş (Kullanılmamış)`', inline: false },
-                    { name: 'Discord ID', value: targetUser.discordId ? `<@${targetUser.discordId}>` : '`Bilinmiyor`', inline: true }
+                    { name: '💻 HWID Durumu', value: targetUser.hwid ? `\`Kayıtlı: ${targetUser.hwid}\`` : '\`Boş (Kullanılmamış)\`', inline: false },
+                    { name: 'Discord ID', value: targetUser.discordId ? `<@${targetUser.discordId}>` : '\`Bilinmiyor\`', inline: true }
                 )
                 .setTimestamp();
 
