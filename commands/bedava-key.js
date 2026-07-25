@@ -12,13 +12,13 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor('#2B2D31')
             .setTitle('Ücretsiz Erişim Paneli')
-            .setDescription(`🚀 **Sistem** --> \`Luas Free\`\n` +
-                            `ID **Erişim Türü** --> \`Herkese Açık\`\n` +
-                            `🪄 **Kullanım Süresi** --> \`Sınırsız\`\n` +
-                            `👑 **Durum** --> \`Aktif ve Çalışıyor\`\n` +
-                            `📝 **Nasıl Alınır?** --> \`Aşağıdaki butona tıkla\`\n` +
-                            `⏰ **Panel Kurulum Zamanı** --> <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
-                            `❗️ **Dikkat!!** \`ALACAĞINIZ KEY TEK KULLANIMLIKTIR VE BİLGİSAYARINIZA (HWID) KİLİTLENİR\``)
+            .setDescription(`🚀 **Sistem -->** \`Luas Free\`\n` +
+                            `🆔 **Erişim Türü -->** \`Herkese Açık\`\n` +
+                            `🪄 **Kullanım Süresi -->** \`Sınırsız\`\n` +
+                            `👑 **Durum -->** \`Aktif ve Çalışıyor\`\n` +
+                            `📝 **Nasıl Alınır? -->** \`Aşağıdaki butona tıkla\`\n` +
+                            `⏰ **Panel Kurulum Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
+                            `❗️ \`Dikkat!!\` __**ALACAĞINIZ KEY BİLGİSAYARINIZA (HWID) KİLİTLENİR**__`)
             .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
             .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi', iconURL: interaction.guild.iconURL() });
 
@@ -61,13 +61,13 @@ module.exports = {
                 .setColor('#2B2D31')
                 .setTitle('🎉 Ücretsiz Key Oluşturuldu')
                 .setDescription(`🚀 **Key -->** \`${password}\`\n` +
-                                `ID **Key ID -->** \`${uniqueKeyId}\`\n` +
+                                `🆔 **Key ID -->** \`${uniqueKeyId}\`\n` +
                                 `🪄 **Key'i Oluşturan Kişi -->** <@${interaction.user.id}>\n` +
                                 `👑 **Key Sahibi -->** <@${interaction.user.id}>\n` +
                                 `📝 **Key'in Oluşturulma Sebebi -->** Ücretsiz Erişim (Free)\n` +
                                 `⏰ **Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
                                 `⏱️ **Key'in Bitiş Zamanı -->** \`Sınırsız\`\n\n` +
-                                `❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``)
+                                `❗️ \`Dikkat!!\` __**KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN**__`)
                 .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi' })
                 .setTimestamp();
 

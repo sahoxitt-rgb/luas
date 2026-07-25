@@ -12,13 +12,13 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor('#FFD700')
             .setTitle('💎 Özel Key Oluşturma Paneli')
-            .setDescription(`🚀 **Sistem** --> \`Luas Premium\`\n` +
-                            `ID **Erişim Türü** --> \`Yönetici Özel\`\n` +
-                            `🪄 **Yetki** --> \`Sadece Yetkililer\`\n` +
-                            `👑 **Durum** --> \`Aktif\`\n` +
-                            `📝 **Nasıl Oluşturulur?** --> \`Aşağıdaki butona tıkla\`\n` +
-                            `⏰ **Panel Kurulum Zamanı** --> <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
-                            `❗️ **Dikkat!!** \`SADECE YETKİLİ KULLANIMI İÇİNDİR\``)
+            .setDescription(`🚀 **Sistem -->** \`Luas Premium\`\n` +
+                            `🆔 **Erişim Türü -->** \`Yönetici Özel\`\n` +
+                            `🪄 **Yetki -->** \`Sadece Yetkililer\`\n` +
+                            `👑 **Durum -->** \`Aktif\`\n` +
+                            `📝 **Nasıl Oluşturulur? -->** \`Aşağıdaki butona tıkla\`\n` +
+                            `⏰ **Panel Kurulum Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
+                            `❗️ \`Dikkat!!\` __**SADECE YETKİLİ KULLANIMI İÇİNDİR**__`)
             .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
             .setFooter({ text: `${interaction.guild.name} • Premium Lisans Sistemi` });
 
