@@ -134,8 +134,7 @@ client.on('interactionCreate', async interaction => {
     // 2. BİLET MENÜSÜ KONTROLÜ (Açılır Menü) -> FORM ÇIKARTIR
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'ticket_select') {
-            // Form çıkaracağımız için deferReply KULLANMIYORUZ!
-            const categoryValue = interaction.values[0]; // satin_alim, destek, is_birligi
+            const categoryValue = interaction.values[0]; 
 
             const modal = new ModalBuilder()
                 .setCustomId(`ticketModal_${categoryValue}`)
@@ -153,7 +152,6 @@ client.on('interactionCreate', async interaction => {
             const firstActionRow = new ActionRowBuilder().addComponents(reasonInput);
             modal.addComponents(firstActionRow);
 
-            // Adama formu gösteriyoruz
             await interaction.showModal(modal);
         }
         return;
@@ -168,18 +166,15 @@ client.on('interactionCreate', async interaction => {
             const hasRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
             
-            // Eğer butona basan yetkili değilse uyarı verip işlemi durdurur
             if (!hasRole && !isAdmin) {
                 return interaction.reply({ content: '❌ **Bu bileti sahiplenmek için yetkiniz yok! Sadece destek ekibi sahiplenebilir.**', ephemeral: true });
             }
 
-            // Sahiplenince embed mesajını güncelle (Kim sahiplendiği yazsın)
             const embed = interaction.message.embeds[0];
             const updatedEmbed = EmbedBuilder.from(embed)
-                .setColor('#00FF00') // Rengi yeşile çevir
+                .setColor('#00FF00') 
                 .addFields({ name: '👤 Bileti Sahiplenen Yetkili', value: `<@${interaction.user.id}>`, inline: false });
 
-            // "Sahiplen" butonunu devre dışı bırak
             const components = interaction.message.components[0].components.map(btn => {
                 if (btn.customId === 'claim_ticket') {
                     return ButtonBuilder.from(btn).setDisabled(true).setLabel(`Sahiplenildi: ${interaction.user.username}`);
@@ -217,7 +212,6 @@ client.on('interactionCreate', async interaction => {
                 
                 const msg = isTR ? '✅ **Başarıyla doğrulandınız! Türkçe rolünüz verildi.**' : '✅ **Successfully verified! English role added.**';
                 
-                // Kayıt Logunu Gönderme
                 const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
@@ -257,8 +251,8 @@ client.on('interactionCreate', async interaction => {
         if (interaction.customId.startsWith('ticketModal_')) {
             await interaction.deferReply({ ephemeral: true });
             
-            const categoryValue = interaction.customId.replace('ticketModal_', ''); // Kategori türünü alıyoruz
-            const reason = interaction.fields.getTextInputValue('ticketReason'); // Formdaki açıklamayı alıyoruz
+            const categoryValue = interaction.customId.replace('ticketModal_', ''); 
+            const reason = interaction.fields.getTextInputValue('ticketReason'); 
             
             let prefix = "destek";
             let baslik = "🛠️ Destek Bileti";
@@ -266,30 +260,25 @@ client.on('interactionCreate', async interaction => {
             else if (categoryValue === "is_birligi") { prefix = "işbirliği"; baslik = "🤝 İş Birliği Bileti"; }
 
             try {
-                // Sayacı bul veya oluştur
                 let counter = await TicketModel.findOne({ id: "ticket" });
                 if (!counter) counter = new TicketModel({ id: "ticket", count: 0 });
                 
                 counter.count += 1;
                 await counter.save();
 
-                // Numarayı 3 haneli yapar (001, 012, 100)
                 const ticketNo = counter.count.toString().padStart(3, '0'); 
                 const channelName = `${prefix}-${interaction.user.username}-${ticketNo}`;
 
-                // Kanal İzinleri
                 const permissionOverwrites = [
-                    { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, // Herkese kapat
-                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }, // Açan kişiye aç
-                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] } // Bota aç
+                    { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, 
+                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }, 
+                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] } 
                 ];
 
-                // Eğer yetkili rol ID ayarlandıysa onlara da aç
                 if (ayarlar.DESTEK_EKIBI_ROL_ID && ayarlar.DESTEK_EKIBI_ROL_ID.length > 5) {
                     permissionOverwrites.push({ id: ayarlar.DESTEK_EKIBI_ROL_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
                 }
 
-                // Kanal Oluşturma
                 const ticketChannel = await interaction.guild.channels.create({
                     name: channelName,
                     type: ChannelType.GuildText,
@@ -297,16 +286,15 @@ client.on('interactionCreate', async interaction => {
                     permissionOverwrites: permissionOverwrites
                 });
 
-                // Biletin İÇİNE ATILACAK MESAJ (FORM VERİSİ VE SENİN İSTEDİĞİN RESİM)
+                // Bilet içine atılacak mesaj (Sağ üstte logo THUMBNAIL ile)
                 const ticketEmbed = new EmbedBuilder()
                     .setColor('#0099FF')
                     .setTitle(baslik)
                     .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir.\n\n📝 **Kullanıcının Belirttiği Sorun:**\n\`\`\`${reason}\`\`\`\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
-                    .setImage('https://i.ibb.co/TM6fB7KN/Luas-Ticket.png')// Biletin içine, yazının altına atılacak olan resim
+                    .setThumbnail('https://i.ibb.co/TM6fB7KN/Luas-Ticket.png') // Sağ üst köşe küçük logo
                     .setFooter({ text: 'Luas • Destek Sistemi' })
                     .setTimestamp();
 
-                // Kapatma ve Sahiplenme Butonları
                 const ticketButtons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('claim_ticket')
