@@ -10,9 +10,15 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         const embed = new EmbedBuilder()
-            .setColor('#FFD700') // Altın Sarısı
-            .setTitle('💎 LUAS • ÖZEL KEY OLUŞTURMA PANELİ')
-            .setDescription('Bu panel üzerinden yöneticiler istedikleri kullanıcı adı ve şifreye sahip **Premium** lisanslar oluşturabilir.\n\n🛠️ **Nasıl Çalışır?**\nAşağıdaki butona tıkladığınızda açılan forma istenilen lisans detaylarını girin. Sistem otomatik olarak bir `Key ID` atayacaktır.')
+            .setColor('#FFD700')
+            .setTitle('💎 Özel Key Oluşturma Paneli')
+            .setDescription(`🚀 **Sistem** --> \`Luas Premium\`\n` +
+                            `ID **Erişim Türü** --> \`Yönetici Özel\`\n` +
+                            `🪄 **Yetki** --> \`Sadece Yetkililer\`\n` +
+                            `👑 **Durum** --> \`Aktif\`\n` +
+                            `📝 **Nasıl Oluşturulur?** --> \`Aşağıdaki butona tıkla\`\n` +
+                            `⏰ **Panel Kurulum Zamanı** --> <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
+                            `❗️ **Dikkat!!** \`SADECE YETKİLİ KULLANIMI İÇİNDİR\``)
             .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
             .setFooter({ text: `${interaction.guild.name} • Premium Lisans Sistemi` });
 
@@ -24,7 +30,7 @@ module.exports = {
         );
 
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.editReply({ content: '✅ Özel key paneli başarıyla kuruldu.' });
+        await interaction.editReply({ content: '✅ **Özel key paneli başarıyla kuruldu!**' });
     },
 
     async handleButton(interaction) {

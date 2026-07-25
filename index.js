@@ -9,9 +9,6 @@ const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder } = re
 const app = express();
 app.use(express.json());
 
-// ==========================================
-// MONGODB BAĞLANTISI VE ŞEMA
-// ==========================================
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://luas:luasorj@cluster0.i2qdv7n.mongodb.net/?appName=Cluster0";
 
 mongoose.connect(MONGO_URI)
@@ -30,9 +27,6 @@ const UserSchema = new mongoose.Schema({
 });
 const UserModel = mongoose.model('User', UserSchema);
 
-// ==========================================
-// EXPRESS API (ROBLOX / GİRİŞ KÖPRÜSÜ & HWID)
-// ==========================================
 const handleLogin = async (req, res) => {
     const username = req.body.username || req.body.kullanici;
     const password = req.body.password || req.body.key || req.body.sifre;
@@ -49,7 +43,6 @@ const handleLogin = async (req, res) => {
             return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
         }
 
-        // HWID Kontrolü
         if (hwid && hwid !== "" && hwid !== "nil") {
             if (!user.hwid || user.hwid === "" || user.hwid === "null") {
                 user.hwid = hwid;
@@ -59,11 +52,7 @@ const handleLogin = async (req, res) => {
             }
         }
 
-        res.json({
-            success: true,
-            message: "Giriş başarılı!",
-            plan: user.plan
-        });
+        res.json({ success: true, message: "Giriş başarılı!", plan: user.plan });
     } catch (error) {
         console.error("API Giriş Hatası:", error);
         res.status(500).json({ success: false, message: "Veritabanı hatası!" });
@@ -74,9 +63,6 @@ app.post('/login', handleLogin);
 app.post('/api/login', handleLogin);
 app.post('/api/verify', handleLogin);
 
-// ==========================================
-// DISCORD BOT & COMMAND HANDLER
-// ==========================================
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
@@ -154,7 +140,6 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
-                // 6 haneli özel ID
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
 
                 const newUser = new UserModel({
@@ -168,12 +153,11 @@ client.on('interactionCreate', async interaction => {
                 });
                 await newUser.save();
 
-                // RESİMDEKİ GİBİ ŞIK TASARIMLI ÖZEL KEY MESAJI
                 const replyEmbed = new EmbedBuilder()
                     .setColor('#FFD700')
                     .setTitle('💎 Özel Key Oluşturuldu')
                     .setDescription(`🚀 **Özel Key -->** \`${password}\`\n` +
-                                    `🆔 **Özel Key ID -->** \`${uniqueKeyId}\`\n` +
+                                    `ID **Özel Key ID -->** \`${uniqueKeyId}\`\n` +
                                     `🪄 **Key'i Oluşturan Kişi -->** <@${interaction.user.id}>\n` +
                                     `👑 **Key Sahibi -->** \`${username}\`\n` +
                                     `📝 **Key'in Oluşturulma Sebebi -->** Premium Erişim\n` +
@@ -183,13 +167,10 @@ client.on('interactionCreate', async interaction => {
                     .setFooter({ text: 'Luas • Premium Lisans Sistemi' })
                     .setTimestamp();
 
-                // LOG KANALI İÇİN DE AYNISI
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
-                    if (logChannel) {
-                        await logChannel.send({ embeds: [replyEmbed] }).catch(() => {});
-                    }
+                    if (logChannel) await logChannel.send({ embeds: [replyEmbed] }).catch(() => {});
                 }
 
                 await interaction.editReply({ embeds: [replyEmbed] });
