@@ -4,8 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
-// ChannelType eklendi, ticket kanallarını açmak için zorunlu.
-const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
 const ayarlar = require('./roller.js');
 
@@ -132,86 +131,74 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 2. BİLET MENÜSÜ KONTROLÜ (Açılır Menü)
+    // 2. BİLET MENÜSÜ KONTROLÜ (Açılır Menü) -> FORM ÇIKARTIR
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'ticket_select') {
-            await interaction.deferReply({ ephemeral: true });
+            // Form çıkaracağımız için deferReply KULLANMIYORUZ!
+            const categoryValue = interaction.values[0]; // satin_alim, destek, is_birligi
 
-            const categoryValue = interaction.values[0];
-            let prefix = "destek";
-            let baslik = "🛠️ Destek Bileti";
-            
-            if (categoryValue === "satin_alim") { prefix = "satınalım"; baslik = "🛒 Satın Alım Bileti"; }
-            else if (categoryValue === "is_birligi") { prefix = "işbirliği"; baslik = "🤝 İş Birliği Bileti"; }
+            const modal = new ModalBuilder()
+                .setCustomId(`ticketModal_${categoryValue}`)
+                .setTitle('🎫 Bilet Oluşturma Formu');
 
-            try {
-                // Sayacı bul veya oluştur
-                let counter = await TicketModel.findOne({ id: "ticket" });
-                if (!counter) counter = new TicketModel({ id: "ticket", count: 0 });
-                
-                counter.count += 1;
-                await counter.save();
+            const reasonInput = new TextInputBuilder()
+                .setCustomId('ticketReason')
+                .setLabel('Lütfen sorununuzu detaylı açıklayın')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Örn: Satın aldığım ürün teslim edilmedi...')
+                .setRequired(true)
+                .setMinLength(10)
+                .setMaxLength(1000);
 
-                // Numarayı 3 haneli yapar (001, 012, 100)
-                const ticketNo = counter.count.toString().padStart(3, '0'); 
-                const channelName = `${prefix}-${interaction.user.username}-${ticketNo}`;
+            const firstActionRow = new ActionRowBuilder().addComponents(reasonInput);
+            modal.addComponents(firstActionRow);
 
-                // Kanal İzinleri
-                const permissionOverwrites = [
-                    { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, // Herkese kapat
-                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }, // Açan kişiye aç
-                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] } // Bota aç
-                ];
-
-                // Eğer yetkili rol ID ayarlandıysa onlara da aç
-                if (ayarlar.DESTEK_EKIBI_ROL_ID && ayarlar.DESTEK_EKIBI_ROL_ID.length > 5) {
-                    permissionOverwrites.push({ id: ayarlar.DESTEK_EKIBI_ROL_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
-                }
-
-                // Kanal Oluşturma
-                const ticketChannel = await interaction.guild.channels.create({
-                    name: channelName,
-                    type: ChannelType.GuildText,
-                    parent: ayarlar.TICKET_KATEGORI_ID && ayarlar.TICKET_KATEGORI_ID.length > 5 ? ayarlar.TICKET_KATEGORI_ID : null,
-                    permissionOverwrites: permissionOverwrites
-                });
-
-                // Bilet içine atılacak mesaj
-                const ticketEmbed = new EmbedBuilder()
-                    .setColor('#0099FF')
-                    .setTitle(baslik)
-                    .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir. Lütfen bu süre zarfında sorununuzu/talebinizi detaylı bir şekilde açıklayınız.\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
-                    .setFooter({ text: 'Luas • Destek Sistemi' })
-                    .setTimestamp();
-
-                const closeButton = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('close_ticket')
-                        .setLabel('🔒 Bileti Kapat')
-                        .setStyle(ButtonStyle.Danger)
-                );
-
-                await ticketChannel.send({ content: `<@${interaction.user.id}> | <@&${ayarlar.DESTEK_EKIBI_ROL_ID}>`, embeds: [ticketEmbed], components: [closeButton] });
-
-                await interaction.editReply({ content: `✅ **Biletiniz başarıyla oluşturuldu! Buradan gidebilirsiniz: ${ticketChannel}**` });
-            } catch (err) {
-                console.error(err);
-                await interaction.editReply({ content: '❌ Bilet oluşturulurken bir hata meydana geldi.' });
-            }
+            // Adama formu gösteriyoruz
+            await interaction.showModal(modal);
         }
         return;
     }
 
-    // 3. BUTON ETKİLEŞİMLERİ (DOGRULAMA, KEY VE BİLET KAPATMA)
+    // 3. BUTON ETKİLEŞİMLERİ (Sahiplenme, Kapatma, Doğrulama, Key vs.)
     if (interaction.isButton()) {
         const { customId } = interaction;
 
+        // --- BİLET SAHİPLENME (CLAIM) ---
+        if (customId === 'claim_ticket') {
+            const hasRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
+            const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+            
+            // Eğer butona basan yetkili değilse uyarı verip işlemi durdurur
+            if (!hasRole && !isAdmin) {
+                return interaction.reply({ content: '❌ **Bu bileti sahiplenmek için yetkiniz yok! Sadece destek ekibi sahiplenebilir.**', ephemeral: true });
+            }
+
+            // Sahiplenince embed mesajını güncelle (Kim sahiplendiği yazsın)
+            const embed = interaction.message.embeds[0];
+            const updatedEmbed = EmbedBuilder.from(embed)
+                .setColor('#00FF00') // Rengi yeşile çevir
+                .addFields({ name: '👤 Bileti Sahiplenen Yetkili', value: `<@${interaction.user.id}>`, inline: false });
+
+            // "Sahiplen" butonunu devre dışı bırak
+            const components = interaction.message.components[0].components.map(btn => {
+                if (btn.customId === 'claim_ticket') {
+                    return ButtonBuilder.from(btn).setDisabled(true).setLabel(`Sahiplenildi: ${interaction.user.username}`);
+                }
+                return ButtonBuilder.from(btn);
+            });
+            const newActionRow = new ActionRowBuilder().addComponents(components);
+
+            await interaction.message.edit({ embeds: [updatedEmbed], components: [newActionRow] });
+            await interaction.reply({ content: `✅ **Bileti başarıyla sahiplendin. Artık müşteriyle ilgilenebilirsin.**`, ephemeral: true });
+            return;
+        }
+
         // --- BİLET KAPATMA ---
         if (customId === 'close_ticket') {
-            await interaction.reply({ content: '🔒 Bilet 3 saniye içinde kapatılıyor...', ephemeral: true });
+            await interaction.reply({ content: '🔒 Bilet 5 saniye içinde kalıcı olarak kapatılıyor...', ephemeral: true });
             setTimeout(() => {
                 interaction.channel.delete().catch(() => {});
-            }, 3000);
+            }, 5000);
             return;
         }
 
@@ -263,8 +250,85 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 4. MODAL (FORM) KONTROLÜ - ÖZEL KEY OLUŞTURMA
+    // 4. MODAL (FORM) KONTROLÜ - (Özel Key ve Bilet Açma)
     if (interaction.isModalSubmit()) {
+        
+        // --- BİLET OLUŞTURMA İŞLEMİ (Form Onaylandıktan Sonra) ---
+        if (interaction.customId.startsWith('ticketModal_')) {
+            await interaction.deferReply({ ephemeral: true });
+            
+            const categoryValue = interaction.customId.replace('ticketModal_', ''); // Kategori türünü alıyoruz
+            const reason = interaction.fields.getTextInputValue('ticketReason'); // Formdaki açıklamayı alıyoruz
+            
+            let prefix = "destek";
+            let baslik = "🛠️ Destek Bileti";
+            if (categoryValue === "satin_alim") { prefix = "satınalım"; baslik = "🛒 Satın Alım Bileti"; }
+            else if (categoryValue === "is_birligi") { prefix = "işbirliği"; baslik = "🤝 İş Birliği Bileti"; }
+
+            try {
+                // Sayacı bul veya oluştur
+                let counter = await TicketModel.findOne({ id: "ticket" });
+                if (!counter) counter = new TicketModel({ id: "ticket", count: 0 });
+                
+                counter.count += 1;
+                await counter.save();
+
+                // Numarayı 3 haneli yapar (001, 012, 100)
+                const ticketNo = counter.count.toString().padStart(3, '0'); 
+                const channelName = `${prefix}-${interaction.user.username}-${ticketNo}`;
+
+                // Kanal İzinleri
+                const permissionOverwrites = [
+                    { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, // Herkese kapat
+                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }, // Açan kişiye aç
+                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] } // Bota aç
+                ];
+
+                // Eğer yetkili rol ID ayarlandıysa onlara da aç
+                if (ayarlar.DESTEK_EKIBI_ROL_ID && ayarlar.DESTEK_EKIBI_ROL_ID.length > 5) {
+                    permissionOverwrites.push({ id: ayarlar.DESTEK_EKIBI_ROL_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+                }
+
+                // Kanal Oluşturma
+                const ticketChannel = await interaction.guild.channels.create({
+                    name: channelName,
+                    type: ChannelType.GuildText,
+                    parent: ayarlar.TICKET_KATEGORI_ID && ayarlar.TICKET_KATEGORI_ID.length > 5 ? ayarlar.TICKET_KATEGORI_ID : null,
+                    permissionOverwrites: permissionOverwrites
+                });
+
+                // Biletin İÇİNE ATILACAK MESAJ (FORM VERİSİ VE SENİN İSTEDİĞİN RESİM)
+                const ticketEmbed = new EmbedBuilder()
+                    .setColor('#0099FF')
+                    .setTitle(baslik)
+                    .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir.\n\n📝 **Kullanıcının Belirttiği Sorun:**\n\`\`\`${reason}\`\`\`\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
+                    .setImage('https://i.ibb.co/TM6fB7KN.png') // Biletin içine, yazının altına atılacak olan resim
+                    .setFooter({ text: 'Luas • Destek Sistemi' })
+                    .setTimestamp();
+
+                // Kapatma ve Sahiplenme Butonları
+                const ticketButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('claim_ticket')
+                        .setLabel('✋ Sahiplen')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('close_ticket')
+                        .setLabel('🔒 Bileti Kapat')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                await ticketChannel.send({ content: `<@${interaction.user.id}> | <@&${ayarlar.DESTEK_EKIBI_ROL_ID}>`, embeds: [ticketEmbed], components: [ticketButtons] });
+
+                await interaction.editReply({ content: `✅ **Biletiniz başarıyla oluşturuldu! Buraya tıklayarak gidebilirsiniz: ${ticketChannel}**` });
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ Bilet oluşturulurken bir hata meydana geldi.' });
+            }
+            return;
+        }
+
+        // --- ÖZEL KEY OLUŞTURMA (Modal) ---
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
             
