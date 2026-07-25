@@ -13,7 +13,7 @@ module.exports = {
             .setColor('#2B2D31')
             .setTitle('🎫 Destek Sistemi / Support System')
             .setDescription('Bizimle iletişime geçmek için aşağıdaki menüden ilgili kategoriyi seçerek bilet oluşturabilirsiniz.\n\nLütfen gereksiz yere bilet açmayınız, aksi takdirde ceza alabilirsiniz.')
-            .setImage('https://i.ibb.co/TM6fB7KN/Luas-Ticket.png') // Aşağıyı tam kaplayacak büyük afiş resmi
+            .setImage('https://i.ibb.co/Q4hNKq4/Luas-Ticket.png') // Yeni Ticket Resim Linki (Tam Kaplayan)
             .setFooter({ text: 'Luas • Destek Sistemi', iconURL: interaction.guild.iconURL() });
 
         const selectMenu = new StringSelectMenuBuilder()

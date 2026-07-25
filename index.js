@@ -286,12 +286,12 @@ client.on('interactionCreate', async interaction => {
                     permissionOverwrites: permissionOverwrites
                 });
 
-                // Bilet içine atılacak mesaj (Sağ üstte logo THUMBNAIL ile)
+                // Bilet içine atılacak mesaj (Yeni Ticket Resmi Afişiyle)
                 const ticketEmbed = new EmbedBuilder()
                     .setColor('#0099FF')
                     .setTitle(baslik)
                     .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir.\n\n📝 **Kullanıcının Belirttiği Sorun:**\n\`\`\`${reason}\`\`\`\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
-                    .setThumbnail('https://i.ibb.co/TM6fB7KN/Luas-Ticket.png') // Sağ üst köşe küçük logo
+                    .setImage('https://i.ibb.co/Q4hNKq4/Luas-Ticket.png') // Bilet içi yeni resim afişi
                     .setFooter({ text: 'Luas • Destek Sistemi' })
                     .setTimestamp();
 

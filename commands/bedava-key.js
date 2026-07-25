@@ -19,7 +19,7 @@ module.exports = {
                             `📝 **Nasıl Alınır? -->** \`Aşağıdaki butona tıkla\`\n` +
                             `⏰ **Panel Kurulum Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
                             `❗️ \`Dikkat!!\` __**ALACAĞINIZ KEY BİLGİSAYARINIZA (HWID) KİLİTLENİR**__`)
-            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+            .setImage('https://i.ibb.co/kC2gZHD/Luas-Key.png') // 2. SS'deki Yeni Key Resmi Eklendi
             .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi', iconURL: interaction.guild.iconURL() });
 
         const row = new ActionRowBuilder().addComponents(
@@ -30,7 +30,7 @@ module.exports = {
         );
 
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.editReply({ content: '✅ **Ücretsiz key paneli yepyeni tasarımıyla kanala atıldı!**' });
+        await interaction.editReply({ content: '✅ **Ücretsiz key paneli yeni resmiyle kanala atıldı!**' });
     },
 
     async handleButton(interaction, UserModel) {
@@ -68,6 +68,7 @@ module.exports = {
                                 `⏰ **Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
                                 `⏱️ **Key'in Bitiş Zamanı -->** \`Sınırsız\`\n\n` +
                                 `❗️ \`Dikkat!!\` __**KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN**__`)
+                .setImage('https://i.ibb.co/kC2gZHD/Luas-Key.png') // DM/Log kısmına da eklendi
                 .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi' })
                 .setTimestamp();
 

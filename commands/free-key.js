@@ -19,7 +19,7 @@ module.exports = {
                             `📝 **How to get? -->** \`Click the button below\`\n` +
                             `⏰ **Panel Setup Time -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
                             `❗️ \`Warning!!\` __**THE KEY YOU RECEIVE WILL BE LOCKED TO YOUR HARDWARE (HWID)**__`)
-            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+            .setImage('https://i.ibb.co/kC2gZHD/Luas-Key.png') // 2. SS'deki Yeni Key Resmi Eklendi
             .setFooter({ text: 'Luas • Automatic Delivery System', iconURL: interaction.guild.iconURL() });
 
         const row = new ActionRowBuilder().addComponents(
@@ -30,7 +30,7 @@ module.exports = {
         );
 
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.editReply({ content: '✅ **Free key panel has been successfully set up!**' });
+        await interaction.editReply({ content: '✅ **Free key panel has been successfully set up with new image!**' });
     },
 
     async handleButton(interaction, UserModel) {
@@ -68,6 +68,7 @@ module.exports = {
                                 `⏰ **Generation Time -->** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
                                 `⏱️ **Expiration -->** \`Lifetime\`\n\n` +
                                 `❗️ \`Warning!!\` __**THE KEY IS SINGLE USE, DO NOT SHARE IT WITH ANYONE**__`)
+                .setImage('https://i.ibb.co/kC2gZHD/Luas-Key.png')
                 .setFooter({ text: 'Luas • Automatic Delivery System' })
                 .setTimestamp();
 
