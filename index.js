@@ -157,6 +157,52 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
+        // --- YETKİLİ BAŞVURU FORMU AÇMA BUTONLARI ---
+        if (customId === 'open_staff_modal_tr' || customId === 'open_staff_modal_en') {
+            const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
+            const modal = new ModalBuilder()
+                .setCustomId(`staffModal_${lang}`)
+                .setTitle(lang === 'TR' ? '🛡️ Yetkili Başvuru Formu' : '🛡️ Staff Application Form');
+
+            const nameAgeInput = new TextInputBuilder()
+                .setCustomId('staffNameAge')
+                .setLabel(lang === 'TR' ? 'İsminiz ve Yaşınız?' : 'Your Name & Age?')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Örn: Ali, 18')
+                .setRequired(true);
+
+            const commandsInfoInput = new TextInputBuilder()
+                .setCustomId('staffCommands')
+                .setLabel(lang === 'TR' ? 'Komutlar hakkında bilgin var mı?' : 'Do you know about bot commands?')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Örn: Evet, moderasyon komutlarını biliyorum...')
+                .setRequired(true);
+
+            const discordTimeInput = new TextInputBuilder()
+                .setCustomId('staffDiscordTime')
+                .setLabel(lang === 'TR' ? 'Discordu ne zamandan beri kullanıyorsun?' : 'How long have you been using Discord?')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Örn: 2021\'den beri...')
+                .setRequired(true);
+
+            const whyUsInput = new TextInputBuilder()
+                .setCustomId('staffWhyUs')
+                .setLabel(lang === 'TR' ? 'Neden biz?' : 'Why us?')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Örn: Sunucunuzu çok beğeniyorum ve katkı sağlamak istiyorum...')
+                .setRequired(true);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(nameAgeInput),
+                new ActionRowBuilder().addComponents(commandsInfoInput),
+                new ActionRowBuilder().addComponents(discordTimeInput),
+                new ActionRowBuilder().addComponents(whyUsInput)
+            );
+
+            await interaction.showModal(modal);
+            return;
+        }
+
         // --- SCRIPT ÖNERİ FORMU AÇMA BUTONLARI ---
         if (customId === 'open_suggestion_modal_tr' || customId === 'open_suggestion_modal_en') {
             const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
@@ -187,7 +233,53 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // --- ÖNERİ ONAYLAMA (✅) VEYA REDDETME (❌) ---
+        // --- YETKİLİ BAŞVURU ONAYLAMA (✅) VEYA REDDETME (❌) ---
+        if (customId.startsWith('approve_staff_') || customId.startsWith('reject_staff_')) {
+            const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+            const hasSupportRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
+
+            if (!isAdmin && !hasSupportRole) {
+                return interaction.reply({ content: '❌ **Bu işlemi yapmak için yetkiniz yok!**', ephemeral: true });
+            }
+
+            const isApprove = customId.startsWith('approve_staff_');
+            const targetUserId = customId.split('_')[2]; 
+
+            const embed = interaction.message.embeds[0];
+            const updatedEmbed = EmbedBuilder.from(embed)
+                .setColor(isApprove ? '#00FF00' : '#FF0000')
+                .addFields({ 
+                    name: isApprove ? '✅ Onaylayan Yetkili' : '❌ Reddeden Yetkili', 
+                    value: `<@${interaction.user.id}>`, 
+                    inline: false 
+                });
+
+            const disabledRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dummy_app').setLabel('Onaylandı').setStyle(ButtonStyle.Success).setDisabled(true),
+                new ButtonBuilder().setCustomId('dummy_rej').setLabel('Reddedildi').setStyle(ButtonStyle.Danger).setDisabled(true)
+            );
+
+            await interaction.message.edit({ embeds: [updatedEmbed], components: [disabledRow] });
+
+            try {
+                const targetUser = await client.users.fetch(targetUserId);
+                if (targetUser) {
+                    const dmEmbed = new EmbedBuilder()
+                        .setColor(isApprove ? '#00FF00' : '#FF0000')
+                        .setTitle(isApprove ? '🎉 Yetkili Başvurunuz Onaylandı!' : '❌ Yetkili Başvurunuz Reddedildi')
+                        .setDescription(isApprove 
+                            ? 'Tebrikler! Yetkili başvuru formunuz ekibimiz tarafından incelenmiş ve **onaylanmıştır**! Sizinle iletişime geçilecektir.' 
+                            : 'Maalesef gönderdiğiniz yetkili başvuru formu şu an için uygun görülmemiş ve **reddedilmiştir**.')
+                        .setTimestamp();
+                    await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
+                }
+            } catch (e) {}
+
+            await interaction.reply({ content: `✅ **Başvuru başarıyla ${isApprove ? 'onaylandı' : 'reddedildi'} ve kullanıcıya DM gönderildi.**`, ephemeral: true });
+            return;
+        }
+
+        // --- SCRIPT ÖNERİ ONAYLAMA (✅) VEYA REDDETME (❌) ---
         if (customId.startsWith('approve_sugg_') || customId.startsWith('reject_sugg_')) {
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
             const hasSupportRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
@@ -317,15 +409,66 @@ client.on('interactionCreate', async interaction => {
     // 4. MODAL SUBMIT (FORM GÖNDERİMLERİ)
     if (interaction.isModalSubmit()) {
         
-        // --- SCRIPT ÖNERİ FORMU GÖNDERİMİ (TR ve EN Ayrı Kanallara Düşer) ---
-        if (interaction.customId.startsWith('suggestionModal_')) {
+        // --- YETKİLİ BAŞVURU FORMU GÖNDERİMİ ---
+        if (interaction.customId.startsWith('staffModal_')) {
             await interaction.deferReply({ ephemeral: true });
 
             const lang = interaction.customId.split('_')[1]; // TR veya EN
+            const nameAge = interaction.fields.getTextInputValue('staffNameAge');
+            const commands = interaction.fields.getTextInputValue('staffCommands');
+            const discordTime = interaction.fields.getTextInputValue('staffDiscordTime');
+            const whyUs = interaction.fields.getTextInputValue('staffWhyUs');
+
+            const targetChannelId = lang === 'TR' ? ayarlar.TR_BASVURU_KANAL_ID : ayarlar.EN_BASVURU_KANAL_ID;
+
+            if (targetChannelId) {
+                const logChannel = interaction.client.channels.cache.get(targetChannelId);
+                if (logChannel) {
+                    const joinedTimestamp = Math.floor(interaction.member.joinedTimestamp / 1000);
+
+                    const staffEmbed = new EmbedBuilder()
+                        .setColor('#9400D3')
+                        .setTitle(lang === 'TR' ? '🛡️ Yeni Yetkili Başvurusu' : '🛡️ New Staff Application')
+                        .setDescription(`👤 **Başvuran Kullanıcı -->** <@${interaction.user.id}>\n` +
+                                        `🆔 **Discord ID -->** \`${interaction.user.id}\`\n` +
+                                        `📥 **Sunucuya Katılım Tarihi -->** <t:${joinedTimestamp}:F>\n` +
+                                        `🌍 **Dil -->** \`${lang}\`\n\n` +
+                                        `📝 **İsim ve Yaş:**\n\`\`\`${nameAge}\`\`\`\n` +
+                                        `🛠️ **Komutlar Hakkında Bilgi:**\n\`\`\`${commands}\`\`\`\n` +
+                                        `⏰ **Discord'u Ne Zamandan Beri Kullanıyor:**\n\`\`\`${discordTime}\`\`\`\n` +
+                                        `⭐ **Neden Biz?:**\n\`\`\`${whyUs}\`\`\`\n\n` +
+                                        `❗️ \`İşlem:\` **Aşağıdaki butonları kullanarak başvuruyu onaylayabilir veya reddedebilirsiniz.**`)
+                        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+                        .setFooter({ text: 'Luas • Yetkili Başvuru Sistemi' })
+                        .setTimestamp();
+
+                    const actionRow = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`approve_staff_${interaction.user.id}`)
+                            .setLabel('✅ Onayla')
+                            .setStyle(ButtonStyle.Success),
+                        new ButtonBuilder()
+                            .setCustomId(`reject_staff_${interaction.user.id}`)
+                            .setLabel('❌ Reddet')
+                            .setStyle(ButtonStyle.Danger)
+                    );
+
+                    await logChannel.send({ embeds: [staffEmbed], components: [actionRow] }).catch(() => {});
+                }
+            }
+
+            await interaction.editReply({ content: lang === 'TR' ? '✅ **Yetkili başvurunuz başarıyla yetkili kanalına iletildi!**' : '✅ **Your staff application has been successfully sent to the staff channel!**' });
+            return;
+        }
+
+        // --- SCRIPT ÖNERİ FORMU GÖNDERİMİ ---
+        if (interaction.customId.startsWith('suggestionModal_')) {
+            await interaction.deferReply({ ephemeral: true });
+
+            const lang = interaction.customId.split('_')[1]; 
             const game = interaction.fields.getTextInputValue('suggGame');
             const features = interaction.fields.getTextInputValue('suggFeatures');
 
-            // Hangi dilden geldiyse ilgili kanal ID'sini seçiyoruz
             const targetChannelId = lang === 'TR' ? ayarlar.TR_ONERI_KANAL_ID : ayarlar.EN_ONERI_KANAL_ID;
 
             if (targetChannelId) {
