@@ -197,9 +197,8 @@ client.on('interactionCreate', async interaction => {
             }
 
             const isApprove = customId.startsWith('approve_sugg_');
-            const targetUserId = customId.split('_')[2]; // Öneriyi yapan adamın ID'si
+            const targetUserId = customId.split('_')[2]; 
 
-            // Butonları devre dışı bırak
             const embed = interaction.message.embeds[0];
             const updatedEmbed = EmbedBuilder.from(embed)
                 .setColor(isApprove ? '#00FF00' : '#FF0000')
@@ -216,7 +215,6 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.message.edit({ embeds: [updatedEmbed], components: [disabledRow] });
 
-            // Kullanıcıya DM Gönderme
             try {
                 const targetUser = await client.users.fetch(targetUserId);
                 if (targetUser) {
@@ -319,28 +317,29 @@ client.on('interactionCreate', async interaction => {
     // 4. MODAL SUBMIT (FORM GÖNDERİMLERİ)
     if (interaction.isModalSubmit()) {
         
-        // --- SCRIPT ÖNERİ FORMU GÖNDERİMİ ---
+        // --- SCRIPT ÖNERİ FORMU GÖNDERİMİ (TR ve EN Ayrı Kanallara Düşer) ---
         if (interaction.customId.startsWith('suggestionModal_')) {
             await interaction.deferReply({ ephemeral: true });
 
-            const lang = interaction.customId.split('_')[1];
+            const lang = interaction.customId.split('_')[1]; // TR veya EN
             const game = interaction.fields.getTextInputValue('suggGame');
             const features = interaction.fields.getTextInputValue('suggFeatures');
 
-            const logChannelId = ayarlar.ONERI_LOG_KANAL_ID || ayarlar.KAYIT_LOG_KANAL_ID;
-            if (logChannelId) {
-                const logChannel = interaction.client.channels.cache.get(logChannelId);
+            // Hangi dilden geldiyse ilgili kanal ID'sini seçiyoruz
+            const targetChannelId = lang === 'TR' ? ayarlar.TR_ONERI_KANAL_ID : ayarlar.EN_ONERI_KANAL_ID;
+
+            if (targetChannelId) {
+                const logChannel = interaction.client.channels.cache.get(targetChannelId);
                 if (logChannel) {
-                    // Kullanıcının sunucuya katılım tarihi
                     const joinedTimestamp = Math.floor(interaction.member.joinedTimestamp / 1000);
 
                     const suggestionEmbed = new EmbedBuilder()
-                        .setColor('#FFA500')
-                        .setTitle('💡 Yeni Script Önerisi Geldi')
+                        .setColor(lang === 'TR' ? '#E60000' : '#00247D')
+                        .setTitle(lang === 'TR' ? '💡 Yeni Türkçe Script Önerisi' : '💡 New English Script Suggestion')
                         .setDescription(`👤 **Öneren Kullanıcı -->** <@${interaction.user.id}>\n` +
                                         `🆔 **Discord ID -->** \`${interaction.user.id}\`\n` +
                                         `📥 **Sunucuya Katılım Tarihi -->** <t:${joinedTimestamp}:F>\n` +
-                                        `🌍 **Form Dili -->** \`${lang}\`\n\n` +
+                                        `🌍 **Dil -->** \`${lang}\`\n\n` +
                                         `🎮 **Oynanan / İstenen Oyun:**\n\`\`\`${game}\`\`\`\n` +
                                         `⚡ **İstenen Özellikler:**\n\`\`\`${features}\`\`\`\n\n` +
                                         `❗️ \`İşlem:\` **Aşağıdaki butonları kullanarak öneriyi onaylayabilir veya reddedebilirsiniz.**`)
@@ -348,7 +347,6 @@ client.on('interactionCreate', async interaction => {
                         .setFooter({ text: 'Luas • Öneri Sistemi' })
                         .setTimestamp();
 
-                    // Onaylama (✅) ve Reddetme (❌) Butonları (Kullanıcının ID'sini buton ID'sine gömüyoruz)
                     const actionRow = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId(`approve_sugg_${interaction.user.id}`)
@@ -364,7 +362,7 @@ client.on('interactionCreate', async interaction => {
                 }
             }
 
-            await interaction.editReply({ content: lang === 'TR' ? '✅ **Script öneriniz başarıyla yönetici ekibine iletildi!**' : '✅ **Your script suggestion has been successfully sent to the management team!**' });
+            await interaction.editReply({ content: lang === 'TR' ? '✅ **Script öneriniz başarıyla Türkçe öneri kanalına iletildi!**' : '✅ **Your script suggestion has been successfully sent to the English suggestion channel!**' });
             return;
         }
 
