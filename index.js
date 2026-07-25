@@ -4,9 +4,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
-const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder } = require('discord.js');
+// ChannelType eklendi, ticket kanallarını açmak için zorunlu.
+const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// ID'leri tuttuğumuz dosyayı içeri aktarıyoruz
 const ayarlar = require('./roller.js');
 
 const app = express();
@@ -21,6 +21,7 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log("✅ MongoDB bağlantısı başarılı!"))
     .catch(err => console.error("⛔ MongoDB bağlantı hatası:", err));
 
+// KULLANICI ŞEMASI
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true },
     password: { type: String, required: true },
@@ -32,6 +33,13 @@ const UserSchema = new mongoose.Schema({
     creatorTag: { type: String, default: "Sistem / Bilinmiyor" }
 });
 const UserModel = mongoose.model('User', UserSchema);
+
+// TICKET SAYAÇ ŞEMASI (001, 002 için)
+const TicketSchema = new mongoose.Schema({
+    id: { type: String, default: "ticket" },
+    count: { type: Number, default: 0 }
+});
+const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
 // ==========================================
 // EXPRESS API (ROBLOX / GİRİŞ KÖPRÜSÜ & HWID)
@@ -52,7 +60,6 @@ const handleLogin = async (req, res) => {
             return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
         }
 
-        // HWID Kontrolü
         if (hwid && hwid !== "" && hwid !== "nil") {
             if (!user.hwid || user.hwid === "" || user.hwid === "null") {
                 user.hwid = hwid;
@@ -62,11 +69,7 @@ const handleLogin = async (req, res) => {
             }
         }
 
-        res.json({
-            success: true,
-            message: "Giriş başarılı!",
-            plan: user.plan
-        });
+        res.json({ success: true, message: "Giriş başarılı!", plan: user.plan });
     } catch (error) {
         console.error("API Giriş Hatası:", error);
         res.status(500).json({ success: false, message: "Veritabanı hatası!" });
@@ -104,15 +107,9 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
         if (process.env.GUILD_ID) {
-            console.log('🧹 Eski global ve guild komut kalıntıları tamamen temizleniyor...');
-            await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
-            await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [] });
-            
             await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: commandArray });
-            console.log('✨ Komutlar tertemiz bir şekilde sadece sunucuya yüklendi ve tekrarlar yok edildi!');
         } else {
             await rest.put(Routes.applicationCommands(client.user.id), { body: commandArray });
-            console.log('✨ Slash komutları global olarak yüklendi.');
         }
     } catch (error) {
         console.error("⛔ Komut yükleme hatası:", error);
@@ -135,9 +132,88 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 2. BUTON ETKİLEŞİMLERİ (DOGRULAMA VE KEY SİSTEMİ)
+    // 2. BİLET MENÜSÜ KONTROLÜ (Açılır Menü)
+    if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'ticket_select') {
+            await interaction.deferReply({ ephemeral: true });
+
+            const categoryValue = interaction.values[0];
+            let prefix = "destek";
+            let baslik = "🛠️ Destek Bileti";
+            
+            if (categoryValue === "satin_alim") { prefix = "satınalım"; baslik = "🛒 Satın Alım Bileti"; }
+            else if (categoryValue === "is_birligi") { prefix = "işbirliği"; baslik = "🤝 İş Birliği Bileti"; }
+
+            try {
+                // Sayacı bul veya oluştur
+                let counter = await TicketModel.findOne({ id: "ticket" });
+                if (!counter) counter = new TicketModel({ id: "ticket", count: 0 });
+                
+                counter.count += 1;
+                await counter.save();
+
+                // Numarayı 3 haneli yapar (001, 012, 100)
+                const ticketNo = counter.count.toString().padStart(3, '0'); 
+                const channelName = `${prefix}-${interaction.user.username}-${ticketNo}`;
+
+                // Kanal İzinleri
+                const permissionOverwrites = [
+                    { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, // Herkese kapat
+                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }, // Açan kişiye aç
+                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] } // Bota aç
+                ];
+
+                // Eğer yetkili rol ID ayarlandıysa onlara da aç
+                if (ayarlar.DESTEK_EKIBI_ROL_ID && ayarlar.DESTEK_EKIBI_ROL_ID.length > 5) {
+                    permissionOverwrites.push({ id: ayarlar.DESTEK_EKIBI_ROL_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+                }
+
+                // Kanal Oluşturma
+                const ticketChannel = await interaction.guild.channels.create({
+                    name: channelName,
+                    type: ChannelType.GuildText,
+                    parent: ayarlar.TICKET_KATEGORI_ID && ayarlar.TICKET_KATEGORI_ID.length > 5 ? ayarlar.TICKET_KATEGORI_ID : null,
+                    permissionOverwrites: permissionOverwrites
+                });
+
+                // Bilet içine atılacak mesaj
+                const ticketEmbed = new EmbedBuilder()
+                    .setColor('#0099FF')
+                    .setTitle(baslik)
+                    .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir. Lütfen bu süre zarfında sorununuzu/talebinizi detaylı bir şekilde açıklayınız.\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
+                    .setFooter({ text: 'Luas • Destek Sistemi' })
+                    .setTimestamp();
+
+                const closeButton = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('close_ticket')
+                        .setLabel('🔒 Bileti Kapat')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                await ticketChannel.send({ content: `<@${interaction.user.id}> | <@&${ayarlar.DESTEK_EKIBI_ROL_ID}>`, embeds: [ticketEmbed], components: [closeButton] });
+
+                await interaction.editReply({ content: `✅ **Biletiniz başarıyla oluşturuldu! Buradan gidebilirsiniz: ${ticketChannel}**` });
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ Bilet oluşturulurken bir hata meydana geldi.' });
+            }
+        }
+        return;
+    }
+
+    // 3. BUTON ETKİLEŞİMLERİ (DOGRULAMA, KEY VE BİLET KAPATMA)
     if (interaction.isButton()) {
         const { customId } = interaction;
+
+        // --- BİLET KAPATMA ---
+        if (customId === 'close_ticket') {
+            await interaction.reply({ content: '🔒 Bilet 3 saniye içinde kapatılıyor...', ephemeral: true });
+            setTimeout(() => {
+                interaction.channel.delete().catch(() => {});
+            }, 3000);
+            return;
+        }
 
         // --- KAYIT (DOGRULAMA) SİSTEMİ ---
         if (customId === 'verify_tr' || customId === 'verify_en') {
@@ -147,67 +223,47 @@ client.on('interactionCreate', async interaction => {
             const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
             const role = interaction.guild.roles.cache.get(roleId);
 
-            if (!role) {
-                return interaction.editReply({ content: '❌ **Sistem hatası: Ayarlanan rol sunucuda bulunamadı! Lütfen roller.js dosyasındaki ID\'leri kontrol et.**' });
-            }
+            if (!role) return interaction.editReply({ content: '❌ **Sistem hatası: Ayarlanan rol sunucuda bulunamadı!**' });
 
             try {
                 await interaction.member.roles.add(role);
                 
-                const msg = isTR 
-                    ? '✅ **Başarıyla doğrulandınız! Türkçe rolünüz verildi ve kanallar açıldı.**' 
-                    : '✅ **Successfully verified! English role added and channels unlocked.**';
+                const msg = isTR ? '✅ **Başarıyla doğrulandınız! Türkçe rolünüz verildi.**' : '✅ **Successfully verified! English role added.**';
                 
                 // Kayıt Logunu Gönderme
                 const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
                     if (logChannel) {
-                        const langText = isTR ? '🇹🇷 Türkçe (TR)' : '🇬🇧 İngilizce (EN)';
-                        
                         const verifyLogEmbed = new EmbedBuilder()
                             .setColor(isTR ? '#E60000' : '#00247D')
                             .setTitle('✅ Yeni Kullanıcı Kayıt Oldu')
-                            .setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n` +
-                                            `🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n` +
-                                            `🌍 **Seçtiği Dil -->** \`${langText}\`\n` +
-                                            `⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
-                                            `❗️ \`Bilgi:\` **İlgili rol kullanıcıya başarıyla tanımlandı.**`)
-                            .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-                            .setFooter({ text: 'Luas • Doğrulama Sistemi' })
+                            .setDescription(`👤 **Kullanıcı:** <@${interaction.user.id}>\n🌍 **Dil:** \`${isTR ? 'TR' : 'EN'}\``)
                             .setTimestamp();
-                            
                         await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
                     }
                 }
                 
                 return interaction.editReply({ content: msg });
             } catch (error) {
-                console.error(error);
-                return interaction.editReply({ content: '❌ **Rol verilirken bir hata oluştu. Botun rolünün, verilecek rolden daha ÜSTTE olduğundan emin olun!**' });
+                return interaction.editReply({ content: '❌ **Botun yetkisi yok!**' });
             }
         }
 
         // --- KEY SİSTEMİ ---
         let commandName = '';
-        if (customId === 'get_free_key') {
-            commandName = 'bedava-key';
-        } else if (customId === 'get_free_key_en') {
-            commandName = 'free-key';
-        } else if (customId === 'open_custom_modal') {
-            commandName = 'ozel-key';
-        }
+        if (customId === 'get_free_key') commandName = 'bedava-key';
+        else if (customId === 'get_free_key_en') commandName = 'free-key';
+        else if (customId === 'open_custom_modal') commandName = 'ozel-key';
         
         if (commandName !== '') {
             const command = client.commands.get(commandName);
-            if (command && typeof command.handleButton === 'function') {
-                await command.handleButton(interaction, UserModel);
-            }
+            if (command && typeof command.handleButton === 'function') await command.handleButton(interaction, UserModel);
         }
         return;
     }
 
-    // 3. MODAL (FORM) KONTROLÜ - ÖZEL KEY OLUŞTURMA
+    // 4. MODAL (FORM) KONTROLÜ - ÖZEL KEY OLUŞTURMA
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
@@ -217,40 +273,18 @@ client.on('interactionCreate', async interaction => {
             const duration = interaction.fields.getTextInputValue('durationInput');
 
             try {
-                const existing = await UserModel.findOne({ username: username, password: password });
-                if (existing) {
-                    return interaction.editReply({ content: '⚠️ **Bu kullanıcı adı ve key zaten veritabanında kayıtlı!**' });
-                }
+                const existing = await UserModel.findOne({ username, password });
+                if (existing) return interaction.editReply({ content: '⚠️ **Bu kullanıcı adı ve key zaten veritabanında kayıtlı!**' });
 
-                // 6 haneli rastgele ID
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
 
-                const newUser = new UserModel({
-                    username: username,
-                    password: password,
-                    keyId: uniqueKeyId,
-                    plan: "premium",
-                    duration: duration,
-                    discordId: interaction.user.id,
-                    creatorTag: interaction.user.tag
-                });
+                const newUser = new UserModel({ username, password, keyId: uniqueKeyId, plan: "premium", duration, discordId: interaction.user.id, creatorTag: interaction.user.tag });
                 await newUser.save();
 
-                // YENİ TASARIMLI LOG MESAJI
                 const replyEmbed = new EmbedBuilder()
-                    .setColor('#FFD700') // Premium Sarısı
+                    .setColor('#FFD700')
                     .setTitle('💎 Özel Key Oluşturuldu')
-                    .setDescription(`🚀 **Sistem -->** \`Luas Premium\`\n` +
-                                    `🔑 **Özel Key -->** \`${password}\`\n` +
-                                    `🆔 **Özel Key ID -->** \`${uniqueKeyId}\`\n` +
-                                    `🪄 **Oluşturan Kişi -->** <@${interaction.user.id}>\n` +
-                                    `👑 **Key Sahibi -->** \`${username}\`\n` +
-                                    `📝 **Oluşturulma Sebebi -->** Premium Erişim\n` +
-                                    `⏰ **Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-                                    `⏱️ **Bitiş Zamanı -->** \`${duration}\`\n\n` +
-                                    `❗️ \`Dikkat!!\` __**KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN**__`)
-                    .setFooter({ text: 'Luas • Premium Lisans Sistemi' })
-                    .setTimestamp();
+                    .setDescription(`🚀 **Key:** \`${password}\`\n🆔 **ID:** \`${uniqueKeyId}\`\n👑 **Sahip:** \`${username}\``);
 
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
@@ -260,8 +294,7 @@ client.on('interactionCreate', async interaction => {
 
                 await interaction.editReply({ embeds: [replyEmbed] });
             } catch (err) {
-                console.error(err);
-                await interaction.editReply({ content: '❌ **Veritabanına kayıt eklenirken hata oluştu!**' });
+                await interaction.editReply({ content: '❌ **Veritabanı hatası!**' });
             }
         }
     }
