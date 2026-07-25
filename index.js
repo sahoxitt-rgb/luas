@@ -78,10 +78,15 @@ app.post('/api/login', handleLogin);
 app.post('/api/verify', handleLogin);
 
 // ==========================================
-// DISCORD BOT & COMMAND HANDLER
+// DISCORD BOT & COMMAND HANDLER (GuildMembers İzni Eklendi)
 // ==========================================
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers // Üye giriş/çıkışlarını yakalamak için zorunlu!
+    ]
 });
 
 client.commands = new Collection();
@@ -113,6 +118,74 @@ client.once('ready', async () => {
     }
 });
 
+// ==========================================
+// JOIN & LEAVE (GİRİŞ VE ÇIKIŞ SİSTEMİ)
+// ==========================================
+
+// 1. Sunucuya Biri Girdiğinde (Join)
+client.on('guildMemberAdd', async member => {
+    // DM Gönderme
+    try {
+        const dmEmbed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle(`🎉 Luas'a Hoş Geldiniz!`)
+            .setDescription(`Merhaba **${member.user.username}**,\n\n**Luas** sunucumuza hoş geldin! Script hakkında daha fazla bilgi almak ve ayrıcalıklardan yararlanmak için sunucumuza göz atabilirsin. İyi eğlenceler!`)
+            .setTimestamp();
+        
+        await member.send({ embeds: [dmEmbed] }).catch(() => {});
+    } catch (err) {}
+
+    // Giriş Log Kanalına Mesaj Atma
+    const joinChannelId = ayarlar.JOIN_LOG_KANAL_ID;
+    if (joinChannelId) {
+        const channel = member.guild.channels.cache.get(joinChannelId);
+        if (channel) {
+            const joinedTimestamp = Math.floor(member.joinedTimestamp / 1000);
+            const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
+
+            const joinEmbed = new EmbedBuilder()
+                .setColor('#00FF00')
+                .setTitle('📥 Sunucuya Yeni Üye Katıldı (Join)')
+                .setDescription(`👤 **Kullanıcı -->** <@${member.id}>\n` +
+                                `🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n` +
+                                `🆔 **Kullanıcı ID -->** \`${member.id}\`\n` +
+                                `📥 **Sunucuya Katılım -->** <t:${joinedTimestamp}:F>\n` +
+                                `📅 **Discord Hesap Açılışı -->** <t:${createdTimestamp}:F>\n` +
+                                `👥 **Toplam Üye Sayısı -->** \`${member.guild.memberCount}\``)
+                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                .setFooter({ text: 'Luas • Giriş Sistemi' })
+                .setTimestamp();
+
+            await channel.send({ embeds: [joinEmbed] }).catch(() => {});
+        }
+    }
+});
+
+// 2. Sunucudan Biri Ayrıldığında (Leave)
+client.on('guildMemberRemove', async member => {
+    const leaveChannelId = ayarlar.LEAVE_LOG_KANAL_ID;
+    if (leaveChannelId) {
+        const channel = member.guild.channels.cache.get(leaveChannelId);
+        if (channel) {
+            const leaveEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('📤 Sunucudan Üye Ayrıldı (Leave)')
+                .setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n` +
+                                `🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n` +
+                                `🆔 **Kullanıcı ID -->** \`${member.id}\`\n` +
+                                `👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``)
+                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                .setFooter({ text: 'Luas • Çıkış Sistemi' })
+                .setTimestamp();
+
+            await channel.send({ embeds: [leaveEmbed] }).catch(() => {});
+        }
+    }
+});
+
+// ==========================================
+// INTERACTION (ETKİLEŞİM) KONTROLÜ
+// ==========================================
 client.on('interactionCreate', async interaction => {
     // 1. SLASH KOMUTLARI
     if (interaction.isChatInputCommand()) {
@@ -157,7 +230,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        // --- YETKİLİ BAŞVURU FORMU AÇMA BUTONLARI ---
+        // --- YETKİLİ BAŞVURU FORMU AÇMA ---
         if (customId === 'open_staff_modal_tr' || customId === 'open_staff_modal_en') {
             const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
             const modal = new ModalBuilder()
@@ -203,7 +276,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // --- SCRIPT ÖNERİ FORMU AÇMA BUTONLARI ---
+        // --- SCRIPT ÖNERİ FORMU AÇMA ---
         if (customId === 'open_suggestion_modal_tr' || customId === 'open_suggestion_modal_en') {
             const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
             const modal = new ModalBuilder()
@@ -233,7 +306,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // --- YETKİLİ BAŞVURU ONAYLAMA (✅) VEYA REDDETME (❌) ---
+        // --- YETKİLİ BAŞVURU ONAY / RED ---
         if (customId.startsWith('approve_staff_') || customId.startsWith('reject_staff_')) {
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
             const hasSupportRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
@@ -268,7 +341,7 @@ client.on('interactionCreate', async interaction => {
                         .setColor(isApprove ? '#00FF00' : '#FF0000')
                         .setTitle(isApprove ? '🎉 Yetkili Başvurunuz Onaylandı!' : '❌ Yetkili Başvurunuz Reddedildi')
                         .setDescription(isApprove 
-                            ? 'Tebrikler! Yetkili başvuru formunuz ekibimiz tarafından incelenmiş ve **onaylanmıştır**! Sizinle iletişime geçilecektir.' 
+                            ? 'Tebrikler! Yetkili başvuru formunuz ekibimiz tarafından incelenmiş ve **onaylanmıştır**!' 
                             : 'Maalesef gönderdiğiniz yetkili başvuru formu şu an için uygun görülmemiş ve **reddedilmiştir**.')
                         .setTimestamp();
                     await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
@@ -279,7 +352,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // --- SCRIPT ÖNERİ ONAYLAMA (✅) VEYA REDDETME (❌) ---
+        // --- SCRIPT ÖNERİ ONAY / RED ---
         if (customId.startsWith('approve_sugg_') || customId.startsWith('reject_sugg_')) {
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
             const hasSupportRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
@@ -314,14 +387,14 @@ client.on('interactionCreate', async interaction => {
                         .setColor(isApprove ? '#00FF00' : '#FF0000')
                         .setTitle(isApprove ? '🎉 Script Öneriniz Onaylandı!' : '❌ Script Öneriniz Reddedildi')
                         .setDescription(isApprove 
-                            ? 'Gönderdiğiniz script önerisi yönetim ekibimiz tarafından incelenmiş ve **onaylanmıştır**! En yakın zamanda geliştirilmeye başlanacaktır.' 
-                            : 'Maalesef gönderdiğiniz script önerisi şu an için uygun görülmemiş ve **reddedilmiştir**.')
+                            ? 'Gönderdiğiniz script önerisi yönetim ekibimiz tarafından incelenmiş ve **onaylanmıştır**!' 
+                            : 'Maalesef gönderdiğiniz script önerisi reddedilmiştir.')
                         .setTimestamp();
                     await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
                 }
             } catch (e) {}
 
-            await interaction.reply({ content: `✅ **Öneri başarıyla ${isApprove ? 'onaylandı' : 'reddedildi'} ve kullanıcıya DM gönderildi.**`, ephemeral: true });
+            await interaction.reply({ content: `✅ **Öneri başarıyla ${isApprove ? 'onaylandı' : 'reddedildi'}.**`, ephemeral: true });
             return;
         }
 
@@ -413,7 +486,7 @@ client.on('interactionCreate', async interaction => {
         if (interaction.customId.startsWith('staffModal_')) {
             await interaction.deferReply({ ephemeral: true });
 
-            const lang = interaction.customId.split('_')[1]; // TR veya EN
+            const lang = interaction.customId.split('_')[1]; 
             const nameAge = interaction.fields.getTextInputValue('staffNameAge');
             const commands = interaction.fields.getTextInputValue('staffCommands');
             const discordTime = interaction.fields.getTextInputValue('staffDiscordTime');
@@ -443,21 +516,15 @@ client.on('interactionCreate', async interaction => {
                         .setTimestamp();
 
                     const actionRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`approve_staff_${interaction.user.id}`)
-                            .setLabel('✅ Onayla')
-                            .setStyle(ButtonStyle.Success),
-                        new ButtonBuilder()
-                            .setCustomId(`reject_staff_${interaction.user.id}`)
-                            .setLabel('❌ Reddet')
-                            .setStyle(ButtonStyle.Danger)
+                        new ButtonBuilder().setCustomId(`approve_staff_${interaction.user.id}`).setLabel('✅ Onayla').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`reject_staff_${interaction.user.id}`).setLabel('❌ Reddet').setStyle(ButtonStyle.Danger)
                     );
 
                     await logChannel.send({ embeds: [staffEmbed], components: [actionRow] }).catch(() => {});
                 }
             }
 
-            await interaction.editReply({ content: lang === 'TR' ? '✅ **Yetkili başvurunuz başarıyla yetkili kanalına iletildi!**' : '✅ **Your staff application has been successfully sent to the staff channel!**' });
+            await interaction.editReply({ content: lang === 'TR' ? '✅ **Başvurunuz iletildi!**' : '✅ **Application sent!**' });
             return;
         }
 
@@ -491,21 +558,15 @@ client.on('interactionCreate', async interaction => {
                         .setTimestamp();
 
                     const actionRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`approve_sugg_${interaction.user.id}`)
-                            .setLabel('✅ Onayla')
-                            .setStyle(ButtonStyle.Success),
-                        new ButtonBuilder()
-                            .setCustomId(`reject_sugg_${interaction.user.id}`)
-                            .setLabel('❌ Reddet')
-                            .setStyle(ButtonStyle.Danger)
+                        new ButtonBuilder().setCustomId(`approve_sugg_${interaction.user.id}`).setLabel('✅ Onayla').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`reject_sugg_${interaction.user.id}`).setLabel('❌ Reddet').setStyle(ButtonStyle.Danger)
                     );
 
                     await logChannel.send({ embeds: [suggestionEmbed], components: [actionRow] }).catch(() => {});
                 }
             }
 
-            await interaction.editReply({ content: lang === 'TR' ? '✅ **Script öneriniz başarıyla Türkçe öneri kanalına iletildi!**' : '✅ **Your script suggestion has been successfully sent to the English suggestion channel!**' });
+            await interaction.editReply({ content: lang === 'TR' ? '✅ **Öneriniz iletildi!**' : '✅ **Suggestion sent!**' });
             return;
         }
 
