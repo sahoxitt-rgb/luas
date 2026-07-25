@@ -212,15 +212,25 @@ client.on('interactionCreate', async interaction => {
                 
                 const msg = isTR ? '✅ **Başarıyla doğrulandınız! Türkçe rolünüz verildi.**' : '✅ **Successfully verified! English role added.**';
                 
+                // ESKİ JİLET LOG FORMATINA GERİ DÖNDÜRÜLDÜ
                 const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
                     if (logChannel) {
+                        const langText = isTR ? '🇹🇷 Türkçe (TR)' : '🇬🇧 İngilizce (EN)';
+                        
                         const verifyLogEmbed = new EmbedBuilder()
                             .setColor(isTR ? '#E60000' : '#00247D')
                             .setTitle('✅ Yeni Kullanıcı Kayıt Oldu')
-                            .setDescription(`👤 **Kullanıcı:** <@${interaction.user.id}>\n🌍 **Dil:** \`${isTR ? 'TR' : 'EN'}\``)
+                            .setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n` +
+                                            `🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n` +
+                                            `🌍 **Seçtiği Dil -->** \`${langText}\`\n` +
+                                            `⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
+                                            `❗️ \`Bilgi:\` **İlgili rol kullanıcıya başarıyla tanımlandı.**`)
+                            .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+                            .setFooter({ text: 'Luas • Doğrulama Sistemi' })
                             .setTimestamp();
+
                         await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
                     }
                 }
@@ -286,12 +296,12 @@ client.on('interactionCreate', async interaction => {
                     permissionOverwrites: permissionOverwrites
                 });
 
-                // Bilet içine atılacak mesaj (Yeni Ticket Resmi Afişiyle)
+                // Bilet içine atılacak mesaj (Afili Ticket Resmiyle)
                 const ticketEmbed = new EmbedBuilder()
                     .setColor('#0099FF')
                     .setTitle(baslik)
                     .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir.\n\n📝 **Kullanıcının Belirttiği Sorun:**\n\`\`\`${reason}\`\`\`\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
-                    .setImage('https://i.ibb.co/Q4hNKq4/Luas-Ticket.png') // Bilet içi yeni resim afişi
+                    .setImage('https://i.ibb.co/Q4hNKq4/Luas-Ticket.png') 
                     .setFooter({ text: 'Luas • Destek Sistemi' })
                     .setTimestamp();
 
