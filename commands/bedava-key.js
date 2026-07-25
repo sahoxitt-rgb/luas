@@ -7,13 +7,14 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
+        // Sadece onay mesajını gizli yapıyoruz, paneli değil!
         await interaction.deferReply({ ephemeral: true });
 
         const embed = new EmbedBuilder()
             .setColor('#2B2D31')
             .setTitle('🟢 LUAS • ÜCRETSİZ ERİŞİM PANELİ')
-            .setDescription('Aşağıdaki butona tıklayarak ücretsiz versiyon için anında key alabilirsin.\n\n✨ **Özellikler:**\n• Temel özelliklere erişim\n• Reklamlı sürüm\n• Sınırsız kullanım süresi')
-            .setImage('https://i.imgur.com/Line.png') // Mor arka plan linkini buraya koyabilirsin
+            .setDescription('**Aşağıdaki butona tıklayarak ücretsiz versiyon için anında key alabilirsin.**\n\n✨ **Özellikler:**\n**• Temel özelliklere erişim**\n**• Reklamlı sürüm**\n**• Sınırsız kullanım süresi**')
+            .setImage('https://i.imgur.com/Line.png') // Mor arka plan resmi vb.
             .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
             .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi', iconURL: interaction.guild.iconURL() });
 
@@ -24,8 +25,11 @@ module.exports = {
                 .setStyle(ButtonStyle.Success)
         );
 
+        // PANELI KANALA HERKESİN GÖRECEĞİ ŞEKİLDE GÖNDERİYORUZ
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.editReply({ content: '✅ Ücretsiz key paneli kanala kuruldu.' });
+        
+        // SANA GİZLİ ONAY MESAJI VERİYORUZ
+        await interaction.editReply({ content: '✅ **Ücretsiz key paneli kanala başarıyla kuruldu!** (Yukarıdaki paneli herkes görebilir)' });
     },
 
     async handleButton(interaction, UserModel) {
@@ -53,7 +57,7 @@ module.exports = {
             });
             await newUser.save();
 
-            // RESİMDEKİ GİBİ ŞIK TASARIMLI TESLİMAT MESAJI
+            // SANA İLK ATTIĞIM O ŞIK, EMOJİLİ TESLİMAT MESAJI
             const dmEmbed = new EmbedBuilder()
                 .setColor('#2B2D31')
                 .setTitle('🎉 Ücretsiz Key Oluşturuldu')
@@ -69,7 +73,7 @@ module.exports = {
                 .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi' })
                 .setTimestamp();
 
-            // LOG KANALI İÇİN DE AYNISI
+            // LOG KANALINA GİDEN MESAJ
             const logChannelId = process.env.LOG_CHANNEL_ID;
             if (logChannelId) {
                 const logChannel = interaction.client.channels.cache.get(logChannelId);
@@ -78,14 +82,14 @@ module.exports = {
 
             try {
                 await interaction.user.send({ embeds: [dmEmbed] });
-                await interaction.editReply({ content: "✅ Key başarıyla oluşturuldu! Lütfen **DM kutunu** kontrol et." });
+                await interaction.editReply({ content: "✅ **Key başarıyla oluşturuldu! Lütfen DM kutunu kontrol et.**" });
             } catch (e) {
-                // DM Kapalıysa kanala atacak
+                // Eğer kullanıcının DM'si kapalıysa kanala gizli atar
                 await interaction.editReply({ embeds: [dmEmbed] });
             }
         } catch (err) {
             console.error(err);
-            await interaction.editReply({ content: "❌ Bir hata oluştu." });
+            await interaction.editReply({ content: "❌ **Bir hata oluştu.**" });
         }
     }
 };
