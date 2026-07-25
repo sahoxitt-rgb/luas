@@ -168,22 +168,31 @@ client.on('interactionCreate', async interaction => {
                 });
                 await newUser.save();
 
-                // === LOG SİSTEMİ ===
+                // RESİMDEKİ GİBİ ŞIK TASARIMLI ÖZEL KEY MESAJI
+                const replyEmbed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle('💎 Özel Key Oluşturuldu')
+                    .setDescription(`🚀 **Özel Key -->** \`${password}\`\n` +
+                                    `🆔 **Özel Key ID -->** \`${uniqueKeyId}\`\n` +
+                                    `🪄 **Key'i Oluşturan Kişi -->** <@${interaction.user.id}>\n` +
+                                    `👑 **Key Sahibi -->** \`${username}\`\n` +
+                                    `📝 **Key'in Oluşturulma Sebebi -->** Premium Erişim\n` +
+                                    `⏰ **Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
+                                    `⏱️ **Key'in Bitiş Zamanı -->** \`${duration}\`\n\n` +
+                                    `❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``)
+                    .setFooter({ text: 'Luas • Premium Lisans Sistemi' })
+                    .setTimestamp();
+
+                // LOG KANALI İÇİN DE AYNISI
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
                     if (logChannel) {
-                        const logEmbed = new EmbedBuilder()
-                            .setColor('#2B2D31')
-                            .setTitle('Özel Key Oluşturuldu')
-                            .setDescription(`🗝️ **Özel Key -->** \`${password}\`\n🆔 **Özel Key ID -->** \`${uniqueKeyId}\`\n🪄 **Özel Key'i Oluşturan Kişi -->** <@${interaction.user.id}>\n👑 **Özel Key Sahibi -->** \`${username}\`\n📝 **Özel Key'in Oluşturulma Sebebi -->** Premium Erişim\n⏰ **Özel Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n⏱️ **Özel Key'in Bitiş Zamanı -->** \`${duration}\`\n\n❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``);
-                        await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+                        await logChannel.send({ embeds: [replyEmbed] }).catch(() => {});
                     }
                 }
 
-                await interaction.editReply({ 
-                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı:** \`${username}\`\n🔑 **Key:** \`${password}\`` 
-                });
+                await interaction.editReply({ embeds: [replyEmbed] });
             } catch (err) {
                 console.error(err);
                 await interaction.editReply({ content: '❌ Veritabanına kayıt eklenirken hata oluştu!' });
