@@ -6,6 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder } = require('discord.js');
 
+// ID'leri tuttuğumuz dosyayı içeri aktarıyoruz
+const ayarlar = require('./roller.js');
+
 const app = express();
 app.use(express.json());
 
@@ -117,7 +120,7 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    // KOMUT KONTROLÜ
+    // 1. SLASH KOMUTLARI
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -132,25 +135,79 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // BUTON KONTROLÜ (İngilizce butonu eklendi)
+    // 2. BUTON ETKİLEŞİMLERİ (DOGRULAMA VE KEY SİSTEMİ)
     if (interaction.isButton()) {
+        const { customId } = interaction;
+
+        // --- KAYIT (DOGRULAMA) SİSTEMİ ---
+        if (customId === 'verify_tr' || customId === 'verify_en') {
+            await interaction.deferReply({ ephemeral: true });
+            
+            const isTR = customId === 'verify_tr';
+            const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
+            const role = interaction.guild.roles.cache.get(roleId);
+
+            if (!role) {
+                return interaction.editReply({ content: '❌ **Sistem hatası: Ayarlanan rol sunucuda bulunamadı! Lütfen roller.js dosyasındaki ID\'leri kontrol et.**' });
+            }
+
+            try {
+                await interaction.member.roles.add(role);
+                
+                const msg = isTR 
+                    ? '✅ **Başarıyla doğrulandınız! Türkçe rolünüz verildi ve kanallar açıldı.**' 
+                    : '✅ **Successfully verified! English role added and channels unlocked.**';
+                
+                // Kayıt Logunu Gönderme
+                const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
+                if (logChannelId) {
+                    const logChannel = interaction.client.channels.cache.get(logChannelId);
+                    if (logChannel) {
+                        const langText = isTR ? '🇹🇷 Türkçe (TR)' : '🇬🇧 İngilizce (EN)';
+                        
+                        const verifyLogEmbed = new EmbedBuilder()
+                            .setColor(isTR ? '#E60000' : '#00247D')
+                            .setTitle('✅ Yeni Kullanıcı Kayıt Oldu')
+                            .setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n` +
+                                            `🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n` +
+                                            `🌍 **Seçtiği Dil -->** \`${langText}\`\n` +
+                                            `⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
+                                            `❗️ \`Bilgi:\` **İlgili rol kullanıcıya başarıyla tanımlandı.**`)
+                            .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+                            .setFooter({ text: 'Luas • Doğrulama Sistemi' })
+                            .setTimestamp();
+                            
+                        await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
+                    }
+                }
+                
+                return interaction.editReply({ content: msg });
+            } catch (error) {
+                console.error(error);
+                return interaction.editReply({ content: '❌ **Rol verilirken bir hata oluştu. Botun rolünün, verilecek rolden daha ÜSTTE olduğundan emin olun!**' });
+            }
+        }
+
+        // --- KEY SİSTEMİ ---
         let commandName = '';
-        if (interaction.customId === 'get_free_key') {
+        if (customId === 'get_free_key') {
             commandName = 'bedava-key';
-        } else if (interaction.customId === 'get_free_key_en') {
+        } else if (customId === 'get_free_key_en') {
             commandName = 'free-key';
-        } else {
+        } else if (customId === 'open_custom_modal') {
             commandName = 'ozel-key';
         }
         
-        const command = client.commands.get(commandName);
-        if (command && typeof command.handleButton === 'function') {
-            await command.handleButton(interaction, UserModel);
+        if (commandName !== '') {
+            const command = client.commands.get(commandName);
+            if (command && typeof command.handleButton === 'function') {
+                await command.handleButton(interaction, UserModel);
+            }
         }
         return;
     }
 
-    // MODAL (FORM) KONTROLÜ - ÖZEL KEY OLUŞTURMA
+    // 3. MODAL (FORM) KONTROLÜ - ÖZEL KEY OLUŞTURMA
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
@@ -195,14 +252,12 @@ client.on('interactionCreate', async interaction => {
                     .setFooter({ text: 'Luas • Premium Lisans Sistemi' })
                     .setTimestamp();
 
-                // Eğer log kanalı ayarlıysa oraya at
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
                     if (logChannel) await logChannel.send({ embeds: [replyEmbed] }).catch(() => {});
                 }
 
-                // Yetkiliye de mesajı göster
                 await interaction.editReply({ embeds: [replyEmbed] });
             } catch (err) {
                 console.error(err);
