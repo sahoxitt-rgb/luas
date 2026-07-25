@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const Tesseract = require('tesseract.js'); // YAPAY ZEKA MODÜLÜ
 
 const ayarlar = require('./roller.js');
 
@@ -78,14 +79,14 @@ app.post('/api/login', handleLogin);
 app.post('/api/verify', handleLogin);
 
 // ==========================================
-// DISCORD BOT & COMMAND HANDLER (GuildMembers İzni Eklendi)
+// DISCORD BOT & COMMAND HANDLER
 // ==========================================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers // Üye giriş/çıkışlarını yakalamak için zorunlu!
+        GatewayIntentBits.MessageContent, // SS Okuma ve yazı silme için zorunlu
+        GatewayIntentBits.GuildMembers    // Join/Leave için zorunlu
     ]
 });
 
@@ -119,12 +120,132 @@ client.once('ready', async () => {
 });
 
 // ==========================================
+// YAZI ENGEL VE YAPAY ZEKA ABONE SS KONTROLÜ
+// ==========================================
+let queueCount = 0; // Yapay zeka sıra sistemi
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
+
+    // Kanal kontrolü
+    if (message.channel.id === ayarlar.ABONE_SS_KANAL_ID || message.channel.id === ayarlar.SUBSCRIBER_SS_KANAL_ID) {
+        const isTR = message.channel.id === ayarlar.ABONE_SS_KANAL_ID;
+
+        // 1. Resim yoksa uyarıp siler (Yazı engelleme)
+        if (message.attachments.size === 0) {
+            await message.delete().catch(() => {});
+            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Bu kanala SS (resim) dışında bir şey atılamaz! Mesajınız silindi.**` });
+            setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
+            return;
+        }
+
+        const attachment = message.attachments.first();
+        // 2. Eklenen dosya resim değilse
+        if (!attachment.contentType || !attachment.contentType.startsWith('image/')) {
+            await message.delete().catch(() => {});
+            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Geçersiz dosya! Sadece fotoğraf yükleyebilirsiniz.**` });
+            setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
+            return;
+        }
+
+        // 3. Geçerli Resim Yüklendi -> Yapay Zeka İşlemi Başlıyor
+        queueCount++;
+        const processingMsg = await message.reply({ 
+            content: `🤖 **Luas Yapay Zeka** tarafından SS'iniz inceleniyor...\n⏳ *Lütfen bekleyiniz. Tahmini bekleme süresi: 5-15 saniye.*\n📊 *Resim Sırası: ${queueCount}*` 
+        });
+
+        try {
+            // Tesseract ile Resmi Okuma
+            const { data: { text } } = await Tesseract.recognize(
+                attachment.url,
+                isTR ? 'tur' : 'eng'
+            );
+
+            // Okunan metni analiz etme
+            const lowerText = text.toLowerCase().replace(/\s+/g, ' '); 
+            
+            // 1. Şart: Luasscript ismi olmalı
+            const hasName = lowerText.includes('luasscript') || lowerText.includes('luas script') || lowerText.includes('@luasscript');
+            
+            // 2. Şart: Abone olundu yazısı olmalı (TR/EN)
+            const hasSub = isTR ? (lowerText.includes('abone olundu') || lowerText.includes('abone eklendi')) : (lowerText.includes('subscribed'));
+
+            const logChannel = message.guild.channels.cache.get(ayarlar.ABONE_LOG_KANAL_ID);
+
+            if (hasName && hasSub) {
+                // BAŞARILI DURUM
+                const roleId = isTR ? ayarlar.ABONE_ROL_ID : ayarlar.SUBSCRIBER_ROL_ID;
+                const role = message.guild.roles.cache.get(roleId);
+                if (role) await message.member.roles.add(role).catch(() => {});
+
+                // Kullanıcıya DM
+                const dmEmbed = new EmbedBuilder()
+                    .setColor('#00FF00')
+                    .setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!')
+                    .setDescription(isTR 
+                        ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.\nBizi desteklediğiniz için teşekkür ederiz!`
+                        : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.\nThank you for your support!`)
+                    .setTimestamp();
+                await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
+
+                // Log Kanalına Düşme
+                if (logChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setColor('#00FF00')
+                        .setTitle('✅ Başarılı Abone Onayı')
+                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n🌍 **Kanal:** \`${isTR ? 'Türkçe' : 'İngilizce'}\`\n🤖 **Yapay Zeka Durumu:** Kusursuz Onay`)
+                        .setImage(attachment.url)
+                        .setTimestamp();
+                    await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+                }
+
+                await processingMsg.edit({ content: `✅ **Onaylandı!** Rolünüz başarıyla verildi. <@${message.author.id}>` });
+                
+                setTimeout(() => {
+                    processingMsg.delete().catch(() => {});
+                    message.delete().catch(() => {});
+                }, 5000);
+
+            } else {
+                // BAŞARISIZ DURUM
+                const dmEmbed = new EmbedBuilder()
+                    .setColor('#FF0000')
+                    .setTitle(isTR ? '❌ Aboneliğiniz Onaylanmadı' : '❌ Subscription Failed')
+                    .setDescription(isTR 
+                        ? `Maalesef attığınız ekran görüntüsü yapay zeka tarafından reddedildi.\n\n**Sebepler:**\n- Ekranda **@LuaSscript** yazısı okunmuyor.\n- **Abone olundu** butonu görünmüyor.\n- Veya alakasız bir resim attınız.\n\nLütfen net bir SS alıp kanalda tekrar deneyin.`
+                        : `Unfortunately, your screenshot was rejected by the AI.\n\n**Reasons:**\n- **@LuaSscript** text is not readable.\n- **Subscribed** button is missing.\n- Irrelevant image.\n\nPlease take a clear screenshot and try again.`)
+                    .setTimestamp();
+                await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
+
+                if (logChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setColor('#FF0000')
+                        .setTitle('❌ Reddedilen Abone İşlemi')
+                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n🌍 **Kanal:** \`${isTR ? 'Türkçe' : 'İngilizce'}\`\n🤖 **AI Çıktısı (Kısmi):** \`${lowerText.substring(0, 100)}\``)
+                        .setImage(attachment.url)
+                        .setTimestamp();
+                    await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+                }
+
+                await processingMsg.edit({ content: `❌ **Onaylanmadı!** SS yapay zeka tarafından reddedildi. DM'nizi kontrol edin. <@${message.author.id}>` });
+                
+                setTimeout(() => {
+                    processingMsg.delete().catch(() => {});
+                    message.delete().catch(() => {}); 
+                }, 7000);
+            }
+            queueCount--; 
+        } catch (error) {
+            console.error('OCR Hata:', error);
+            await processingMsg.edit({ content: `❌ Sistemsel bir hata oluştu, işlemi daha sonra tekrar deneyin.` });
+            queueCount--;
+        }
+    }
+});
+
+// ==========================================
 // JOIN & LEAVE (GİRİŞ VE ÇIKIŞ SİSTEMİ)
 // ==========================================
-
-// 1. Sunucuya Biri Girdiğinde (Join)
 client.on('guildMemberAdd', async member => {
-    // DM Gönderme
     try {
         const dmEmbed = new EmbedBuilder()
             .setColor('#00FF00')
@@ -135,7 +256,6 @@ client.on('guildMemberAdd', async member => {
         await member.send({ embeds: [dmEmbed] }).catch(() => {});
     } catch (err) {}
 
-    // Giriş Log Kanalına Mesaj Atma
     const joinChannelId = ayarlar.JOIN_LOG_KANAL_ID;
     if (joinChannelId) {
         const channel = member.guild.channels.cache.get(joinChannelId);
@@ -161,7 +281,6 @@ client.on('guildMemberAdd', async member => {
     }
 });
 
-// 2. Sunucudan Biri Ayrıldığında (Leave)
 client.on('guildMemberRemove', async member => {
     const leaveChannelId = ayarlar.LEAVE_LOG_KANAL_ID;
     if (leaveChannelId) {
