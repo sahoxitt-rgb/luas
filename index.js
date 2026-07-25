@@ -20,7 +20,6 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log("✅ MongoDB bağlantısı başarılı!"))
     .catch(err => console.error("⛔ MongoDB bağlantı hatası:", err));
 
-// KULLANICI ŞEMASI
 const UserSchema = new mongoose.Schema({
     username: { type: String, required: true },
     password: { type: String, required: true },
@@ -33,7 +32,6 @@ const UserSchema = new mongoose.Schema({
 });
 const UserModel = mongoose.model('User', UserSchema);
 
-// TICKET SAYAÇ ŞEMASI (001, 002 için)
 const TicketSchema = new mongoose.Schema({
     id: { type: String, default: "ticket" },
     count: { type: Number, default: 0 }
@@ -131,7 +129,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 2. BİLET MENÜSÜ KONTROLÜ (Açılır Menü) -> FORM ÇIKARTIR
+    // 2. AÇILIR MENÜ (TICKET)
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'ticket_select') {
             const categoryValue = interaction.values[0]; 
@@ -149,17 +147,93 @@ client.on('interactionCreate', async interaction => {
                 .setMinLength(10)
                 .setMaxLength(1000);
 
-            const firstActionRow = new ActionRowBuilder().addComponents(reasonInput);
-            modal.addComponents(firstActionRow);
-
+            modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
             await interaction.showModal(modal);
         }
         return;
     }
 
-    // 3. BUTON ETKİLEŞİMLERİ (Sahiplenme, Kapatma, Doğrulama, Key vs.)
+    // 3. BUTON ETKİLEŞİMLERİ
     if (interaction.isButton()) {
         const { customId } = interaction;
+
+        // --- SCRIPT ÖNERİ FORMU AÇMA BUTONLARI ---
+        if (customId === 'open_suggestion_modal_tr' || customId === 'open_suggestion_modal_en') {
+            const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
+            const modal = new ModalBuilder()
+                .setCustomId(`suggestionModal_${lang}`)
+                .setTitle(lang === 'TR' ? '💡 Script Öneri Formu' : '💡 Script Suggestion Form');
+
+            const gameInput = new TextInputBuilder()
+                .setCustomId('suggGame')
+                .setLabel(lang === 'TR' ? 'Hangi Oyun?' : 'Which Game?')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Örn: Roblox, GTA V, Valorant...')
+                .setRequired(true);
+
+            const featuresInput = new TextInputBuilder()
+                .setCustomId('suggFeatures')
+                .setLabel(lang === 'TR' ? 'İstediğiniz Özellikler (Aimbot, ESP...)' : 'Desired Features (Aimbot, ESP...)')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Örn: Aimbot, ESP Box, Teleport...')
+                .setRequired(true);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(gameInput),
+                new ActionRowBuilder().addComponents(featuresInput)
+            );
+
+            await interaction.showModal(modal);
+            return;
+        }
+
+        // --- ÖNERİ ONAYLAMA (✅) VEYA REDDETME (❌) ---
+        if (customId.startsWith('approve_sugg_') || customId.startsWith('reject_sugg_')) {
+            const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+            const hasSupportRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
+
+            if (!isAdmin && !hasSupportRole) {
+                return interaction.reply({ content: '❌ **Bu işlemi yapmak için yetkiniz yok!**', ephemeral: true });
+            }
+
+            const isApprove = customId.startsWith('approve_sugg_');
+            const targetUserId = customId.split('_')[2]; // Öneriyi yapan adamın ID'si
+
+            // Butonları devre dışı bırak
+            const embed = interaction.message.embeds[0];
+            const updatedEmbed = EmbedBuilder.from(embed)
+                .setColor(isApprove ? '#00FF00' : '#FF0000')
+                .addFields({ 
+                    name: isApprove ? '✅ Onaylayan Yetkili' : '❌ Reddeden Yetkili', 
+                    value: `<@${interaction.user.id}>`, 
+                    inline: false 
+                });
+
+            const disabledRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dummy_app').setLabel('Onaylandı').setStyle(ButtonStyle.Success).setDisabled(true),
+                new ButtonBuilder().setCustomId('dummy_rej').setLabel('Reddedildi').setStyle(ButtonStyle.Danger).setDisabled(true)
+            );
+
+            await interaction.message.edit({ embeds: [updatedEmbed], components: [disabledRow] });
+
+            // Kullanıcıya DM Gönderme
+            try {
+                const targetUser = await client.users.fetch(targetUserId);
+                if (targetUser) {
+                    const dmEmbed = new EmbedBuilder()
+                        .setColor(isApprove ? '#00FF00' : '#FF0000')
+                        .setTitle(isApprove ? '🎉 Script Öneriniz Onaylandı!' : '❌ Script Öneriniz Reddedildi')
+                        .setDescription(isApprove 
+                            ? 'Gönderdiğiniz script önerisi yönetim ekibimiz tarafından incelenmiş ve **onaylanmıştır**! En yakın zamanda geliştirilmeye başlanacaktır.' 
+                            : 'Maalesef gönderdiğiniz script önerisi şu an için uygun görülmemiş ve **reddedilmiştir**.')
+                        .setTimestamp();
+                    await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
+                }
+            } catch (e) {}
+
+            await interaction.reply({ content: `✅ **Öneri başarıyla ${isApprove ? 'onaylandı' : 'reddedildi'} ve kullanıcıya DM gönderildi.**`, ephemeral: true });
+            return;
+        }
 
         // --- BİLET SAHİPLENME (CLAIM) ---
         if (customId === 'claim_ticket') {
@@ -167,7 +241,7 @@ client.on('interactionCreate', async interaction => {
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
             
             if (!hasRole && !isAdmin) {
-                return interaction.reply({ content: '❌ **Bu bileti sahiplenmek için yetkiniz yok! Sadece destek ekibi sahiplenebilir.**', ephemeral: true });
+                return interaction.reply({ content: '❌ **Bu bileti sahiplenmek için yetkiniz yok!**', ephemeral: true });
             }
 
             const embed = interaction.message.embeds[0];
@@ -181,63 +255,51 @@ client.on('interactionCreate', async interaction => {
                 }
                 return ButtonBuilder.from(btn);
             });
-            const newActionRow = new ActionRowBuilder().addComponents(components);
 
-            await interaction.message.edit({ embeds: [updatedEmbed], components: [newActionRow] });
-            await interaction.reply({ content: `✅ **Bileti başarıyla sahiplendin. Artık müşteriyle ilgilenebilirsin.**`, ephemeral: true });
+            await interaction.message.edit({ embeds: [updatedEmbed], components: [new ActionRowBuilder().addComponents(components)] });
+            await interaction.reply({ content: `✅ **Bileti başarıyla sahiplendin.**`, ephemeral: true });
             return;
         }
 
         // --- BİLET KAPATMA ---
         if (customId === 'close_ticket') {
-            await interaction.reply({ content: '🔒 Bilet 5 saniye içinde kalıcı olarak kapatılıyor...', ephemeral: true });
-            setTimeout(() => {
-                interaction.channel.delete().catch(() => {});
-            }, 5000);
+            await interaction.reply({ content: '🔒 Bilet 5 saniye içinde kapatılıyor...', ephemeral: true });
+            setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
             return;
         }
 
-        // --- KAYIT (DOGRULAMA) SİSTEMİ ---
+        // --- DOĞRULAMA (KAYIT) SİSTEMİ ---
         if (customId === 'verify_tr' || customId === 'verify_en') {
             await interaction.deferReply({ ephemeral: true });
-            
             const isTR = customId === 'verify_tr';
             const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
             const role = interaction.guild.roles.cache.get(roleId);
 
-            if (!role) return interaction.editReply({ content: '❌ **Sistem hatası: Ayarlanan rol sunucuda bulunamadı!**' });
+            if (!role) return interaction.editReply({ content: '❌ **Rol bulunamadı!**' });
 
             try {
                 await interaction.member.roles.add(role);
+                const msg = isTR ? '✅ **Başarıyla doğrulandınız!**' : '✅ **Successfully verified!**';
                 
-                const msg = isTR ? '✅ **Başarıyla doğrulandınız! Türkçe rolünüz verildi.**' : '✅ **Successfully verified! English role added.**';
-                
-                // ESKİ JİLET LOG FORMATINA GERİ DÖNDÜRÜLDÜ
                 const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
                     if (logChannel) {
-                        const langText = isTR ? '🇹🇷 Türkçe (TR)' : '🇬🇧 İngilizce (EN)';
-                        
                         const verifyLogEmbed = new EmbedBuilder()
                             .setColor(isTR ? '#E60000' : '#00247D')
                             .setTitle('✅ Yeni Kullanıcı Kayıt Oldu')
                             .setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n` +
                                             `🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n` +
-                                            `🌍 **Seçtiği Dil -->** \`${langText}\`\n` +
-                                            `⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
-                                            `❗️ \`Bilgi:\` **İlgili rol kullanıcıya başarıyla tanımlandı.**`)
+                                            `🌍 **Seçtiği Dil -->** \`${isTR ? 'Türkçe (TR)' : 'English (EN)'}\`\n` +
+                                            `⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>`)
                             .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-                            .setFooter({ text: 'Luas • Doğrulama Sistemi' })
                             .setTimestamp();
-
                         await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
                     }
                 }
-                
                 return interaction.editReply({ content: msg });
             } catch (error) {
-                return interaction.editReply({ content: '❌ **Botun yetkisi yok!**' });
+                return interaction.editReply({ content: '❌ **Botun yetkisi yetersiz!**' });
             }
         }
 
@@ -254,13 +316,61 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 4. MODAL (FORM) KONTROLÜ - (Özel Key ve Bilet Açma)
+    // 4. MODAL SUBMIT (FORM GÖNDERİMLERİ)
     if (interaction.isModalSubmit()) {
         
-        // --- BİLET OLUŞTURMA İŞLEMİ (Form Onaylandıktan Sonra) ---
+        // --- SCRIPT ÖNERİ FORMU GÖNDERİMİ ---
+        if (interaction.customId.startsWith('suggestionModal_')) {
+            await interaction.deferReply({ ephemeral: true });
+
+            const lang = interaction.customId.split('_')[1];
+            const game = interaction.fields.getTextInputValue('suggGame');
+            const features = interaction.fields.getTextInputValue('suggFeatures');
+
+            const logChannelId = ayarlar.ONERI_LOG_KANAL_ID || ayarlar.KAYIT_LOG_KANAL_ID;
+            if (logChannelId) {
+                const logChannel = interaction.client.channels.cache.get(logChannelId);
+                if (logChannel) {
+                    // Kullanıcının sunucuya katılım tarihi
+                    const joinedTimestamp = Math.floor(interaction.member.joinedTimestamp / 1000);
+
+                    const suggestionEmbed = new EmbedBuilder()
+                        .setColor('#FFA500')
+                        .setTitle('💡 Yeni Script Önerisi Geldi')
+                        .setDescription(`👤 **Öneren Kullanıcı -->** <@${interaction.user.id}>\n` +
+                                        `🆔 **Discord ID -->** \`${interaction.user.id}\`\n` +
+                                        `📥 **Sunucuya Katılım Tarihi -->** <t:${joinedTimestamp}:F>\n` +
+                                        `🌍 **Form Dili -->** \`${lang}\`\n\n` +
+                                        `🎮 **Oynanan / İstenen Oyun:**\n\`\`\`${game}\`\`\`\n` +
+                                        `⚡ **İstenen Özellikler:**\n\`\`\`${features}\`\`\`\n\n` +
+                                        `❗️ \`İşlem:\` **Aşağıdaki butonları kullanarak öneriyi onaylayabilir veya reddedebilirsiniz.**`)
+                        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+                        .setFooter({ text: 'Luas • Öneri Sistemi' })
+                        .setTimestamp();
+
+                    // Onaylama (✅) ve Reddetme (❌) Butonları (Kullanıcının ID'sini buton ID'sine gömüyoruz)
+                    const actionRow = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`approve_sugg_${interaction.user.id}`)
+                            .setLabel('✅ Onayla')
+                            .setStyle(ButtonStyle.Success),
+                        new ButtonBuilder()
+                            .setCustomId(`reject_sugg_${interaction.user.id}`)
+                            .setLabel('❌ Reddet')
+                            .setStyle(ButtonStyle.Danger)
+                    );
+
+                    await logChannel.send({ embeds: [suggestionEmbed], components: [actionRow] }).catch(() => {});
+                }
+            }
+
+            await interaction.editReply({ content: lang === 'TR' ? '✅ **Script öneriniz başarıyla yönetici ekibine iletildi!**' : '✅ **Your script suggestion has been successfully sent to the management team!**' });
+            return;
+        }
+
+        // --- BİLET OLUŞTURMA FORMU ---
         if (interaction.customId.startsWith('ticketModal_')) {
             await interaction.deferReply({ ephemeral: true });
-            
             const categoryValue = interaction.customId.replace('ticketModal_', ''); 
             const reason = interaction.fields.getTextInputValue('ticketReason'); 
             
@@ -296,7 +406,6 @@ client.on('interactionCreate', async interaction => {
                     permissionOverwrites: permissionOverwrites
                 });
 
-                // Bilet içine atılacak mesaj (Afili Ticket Resmiyle)
                 const ticketEmbed = new EmbedBuilder()
                     .setColor('#0099FF')
                     .setTitle(baslik)
@@ -306,40 +415,30 @@ client.on('interactionCreate', async interaction => {
                     .setTimestamp();
 
                 const ticketButtons = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('claim_ticket')
-                        .setLabel('✋ Sahiplen')
-                        .setStyle(ButtonStyle.Success),
-                    new ButtonBuilder()
-                        .setCustomId('close_ticket')
-                        .setLabel('🔒 Bileti Kapat')
-                        .setStyle(ButtonStyle.Danger)
+                    new ButtonBuilder().setCustomId('claim_ticket').setLabel('✋ Sahiplen').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Bileti Kapat').setStyle(ButtonStyle.Danger)
                 );
 
                 await ticketChannel.send({ content: `<@${interaction.user.id}> | <@&${ayarlar.DESTEK_EKIBI_ROL_ID}>`, embeds: [ticketEmbed], components: [ticketButtons] });
-
-                await interaction.editReply({ content: `✅ **Biletiniz başarıyla oluşturuldu! Buraya tıklayarak gidebilirsiniz: ${ticketChannel}**` });
+                await interaction.editReply({ content: `✅ **Biletiniz başarıyla oluşturuldu: ${ticketChannel}**` });
             } catch (err) {
-                console.error(err);
-                await interaction.editReply({ content: '❌ Bilet oluşturulurken bir hata meydana geldi.' });
+                await interaction.editReply({ content: '❌ Bilet oluşturulurken hata oluştu.' });
             }
             return;
         }
 
-        // --- ÖZEL KEY OLUŞTURMA (Modal) ---
+        // --- ÖZEL KEY OLUŞTURMA ---
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
-            
             const username = interaction.fields.getTextInputValue('usernameInput');
             const password = interaction.fields.getTextInputValue('keyInput');
             const duration = interaction.fields.getTextInputValue('durationInput');
 
             try {
                 const existing = await UserModel.findOne({ username, password });
-                if (existing) return interaction.editReply({ content: '⚠️ **Bu kullanıcı adı ve key zaten veritabanında kayıtlı!**' });
+                if (existing) return interaction.editReply({ content: '⚠️ **Bu kullanıcı adı ve key zaten kayıtlı!**' });
 
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
-
                 const newUser = new UserModel({ username, password, keyId: uniqueKeyId, plan: "premium", duration, discordId: interaction.user.id, creatorTag: interaction.user.tag });
                 await newUser.save();
 
