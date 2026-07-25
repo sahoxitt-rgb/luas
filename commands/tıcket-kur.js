@@ -13,7 +13,7 @@ module.exports = {
             .setColor('#2B2D31')
             .setTitle('🎫 Destek Sistemi / Support System')
             .setDescription('Bizimle iletişime geçmek için aşağıdaki menüden ilgili kategoriyi seçerek bilet oluşturabilirsiniz.\n\nLütfen gereksiz yere bilet açmayınız, aksi takdirde ceza alabilirsiniz.')
-            .setImage('https://i.ibb.co/TM6fB7KN.png') // Verdiğin resim
+            .setImage('https://i.ibb.co/TM6fB7KN/Luas-Ticket.png') // Kurulum paneline resim eklendi
             .setFooter({ text: 'Luas • Destek Sistemi', iconURL: interaction.guild.iconURL() });
 
         const selectMenu = new StringSelectMenuBuilder()
@@ -28,6 +28,6 @@ module.exports = {
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.editReply({ content: '✅ **Ticket paneli başarıyla kuruldu!**' });
+        await interaction.editReply({ content: '✅ **Ticket paneli resimli bir şekilde başarıyla kuruldu!**' });
     }
 };
