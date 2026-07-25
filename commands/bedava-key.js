@@ -13,9 +13,9 @@ module.exports = {
             .setColor('#2B2D31')
             .setTitle('🟢 LUAS • ÜCRETSİZ ERİŞİM PANELİ')
             .setDescription('Aşağıdaki butona tıklayarak ücretsiz versiyon için anında key alabilirsin.\n\n✨ **Özellikler:**\n• Temel özelliklere erişim\n• Reklamlı sürüm\n• Sınırsız kullanım süresi')
-            .setImage('https://i.imgur.com/MOR_ARKA_PLAN_LINKINI_BURAYA_YAPISTIR.png') // <-- EKRAN GÖRÜNTÜSÜNDEKİ RESMİN LİNKİNİ BURAYA KOY
-            .setThumbnail(interaction.guild.iconURL({ dynamic: true })) // Eğer sunucu ikonu değil de o kırmızı logoyu istiyorsan buraya logonun linkini ('https://...') koy
-            .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi', iconURL: interaction.guild.iconURL() }); 
+            .setImage('https://i.imgur.com/Line.png') // Kırmızı logolu veya mor arkaplanlı resmin linkini buraya koyabilirsin
+            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+            .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi', iconURL: interaction.guild.iconURL() });
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
