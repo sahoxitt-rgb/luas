@@ -42,8 +42,8 @@ module.exports = {
                     { name: '🆔 Key ID', value: `\`${targetUser.keyId || 'Yok'}\``, inline: false },
                     { name: '📦 Paket / Plan', value: `\`${targetUser.plan ? targetUser.plan.toUpperCase() : 'FREE'}\``, inline: true },
                     { name: '⏳ Süre', value: `\`${targetUser.duration || 'Sınırsız'}\``, inline: true },
-                    { name: '💻 HWID Durumu', value: targetUser.hwid ? `\`Kayıtlı: ${targetUser.hwid}\`` : '\`Boş (Kullanılmamış)\`', inline: false },
-                    { name: 'Discord ID', value: targetUser.discordId ? `<@${targetUser.discordId}>` : '\`Bilinmiyor\`', inline: true }
+                    { name: '💻 HWID Durumu', value: targetUser.hwid ? `\`Kayıtlı: ${targetUser.hwid}\`` : '`Boş (Kullanılmamış)`', inline: false },
+                    { name: 'Discord ID', value: targetUser.discordId ? `<@${targetUser.discordId}>` : '`Bilinmiyor`', inline: true }
                 )
                 .setTimestamp();
 

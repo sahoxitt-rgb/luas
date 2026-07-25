@@ -154,6 +154,7 @@ client.on('interactionCreate', async interaction => {
                     return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
                 }
 
+                // 6 haneli özel ID
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
 
                 const newUser = new UserModel({
@@ -167,7 +168,7 @@ client.on('interactionCreate', async interaction => {
                 });
                 await newUser.save();
 
-                // === LOG SİSTEMİ BAŞLANGICI ===
+                // === LOG SİSTEMİ ===
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
@@ -175,26 +176,13 @@ client.on('interactionCreate', async interaction => {
                         const logEmbed = new EmbedBuilder()
                             .setColor('#2B2D31')
                             .setTitle('Özel Key Oluşturuldu')
-                            .setDescription(`🗝️ **Özel Key -->** \`${password}\`
-🆔 **Özel Key ID -->** \`${uniqueKeyId}\`
-🪄 **Özel Key'i Oluşturan Kişi -->** <@${interaction.user.id}>
-👑 **Özel Key Sahibi -->** \`${username}\`
-📝 **Özel Key'in Oluşturulma Sebebi -->** Premium Erişim
-⏰ **Özel Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>
-⏱️ **Özel Key'in Bitiş Zamanı -->** \`${duration}\`
-
-❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``);
+                            .setDescription(`🗝️ **Özel Key -->** \`${password}\`\n🆔 **Özel Key ID -->** \`${uniqueKeyId}\`\n🪄 **Özel Key'i Oluşturan Kişi -->** <@${interaction.user.id}>\n👑 **Özel Key Sahibi -->** \`${username}\`\n📝 **Özel Key'in Oluşturulma Sebebi -->** Premium Erişim\n⏰ **Özel Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n⏱️ **Özel Key'in Bitiş Zamanı -->** \`${duration}\`\n\n❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``);
                         await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                     }
                 }
-                // === LOG SİSTEMİ BİTİŞİ ===
 
                 await interaction.editReply({ 
-                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**
-
-🆔 **Key ID:** \`${uniqueKeyId}\`
-👤 **Kullanıcı:** \`${username}\`
-🔑 **Key:** \`${password}\`` 
+                    content: `✅ **Özel Key Başarıyla Oluşturuldu!**\n\n🆔 **Key ID:** \`${uniqueKeyId}\`\n👤 **Kullanıcı:** \`${username}\`\n🔑 **Key:** \`${password}\`` 
                 });
             } catch (err) {
                 console.error(err);

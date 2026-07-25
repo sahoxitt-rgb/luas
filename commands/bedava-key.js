@@ -13,9 +13,9 @@ module.exports = {
             .setColor('#2B2D31')
             .setTitle('🟢 LUAS • ÜCRETSİZ ERİŞİM PANELİ')
             .setDescription('Aşağıdaki butona tıklayarak ücretsiz versiyon için anında key alabilirsin.\n\n✨ **Özellikler:**\n• Temel özelliklere erişim\n• Reklamlı sürüm\n• Sınırsız kullanım süresi')
-            .setImage('https://i.imgur.com/Line.png') // İsteğe bağlı
-            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
-            .setFooter({ text: `${interaction.guild.name} • Otomatik Teslimat Sistemi`, iconURL: interaction.guild.iconURL() });
+            .setImage('https://i.imgur.com/MOR_ARKA_PLAN_LINKINI_BURAYA_YAPISTIR.png') // <-- EKRAN GÖRÜNTÜSÜNDEKİ RESMİN LİNKİNİ BURAYA KOY
+            .setThumbnail(interaction.guild.iconURL({ dynamic: true })) // Eğer sunucu ikonu değil de o kırmızı logoyu istiyorsan buraya logonun linkini ('https://...') koy
+            .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi', iconURL: interaction.guild.iconURL() }); 
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -41,7 +41,7 @@ module.exports = {
             // LUAS-FREE-XXXXXX Formatında (6 Rastgele Harf)
             const randomLetters = Array.from({length: 6}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
             const password = `LUAS-FREE-${randomLetters}`;
-            const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString(); // 6 Haneli Sayısal ID
+            const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString(); 
             
             const newUser = new UserModel({
                 username: "luas",
@@ -53,7 +53,7 @@ module.exports = {
             });
             await newUser.save();
 
-            // === LOG SİSTEMİ BAŞLANGICI ===
+            // === LOG SİSTEMİ ===
             const logChannelId = process.env.LOG_CHANNEL_ID;
             if (logChannelId) {
                 const logChannel = interaction.client.channels.cache.get(logChannelId);
@@ -65,7 +65,6 @@ module.exports = {
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
             }
-            // === LOG SİSTEMİ BİTİŞİ ===
 
             const dmEmbed = new EmbedBuilder()
                 .setTitle("🎉 Ücretsiz Keyin Hazır!")
@@ -75,7 +74,7 @@ module.exports = {
                                 `🔑 **Key:** \`${password}\`\n\n` +
                                 "⚠️ *Hesabın ilk girdiğin bilgisayara (HWID) kilitlenecektir.*")
                 .setColor('#00FF00')
-                .setFooter({ text: 'Luas License System' })
+                .setFooter({ text: 'Luas • Otomatik Teslimat Sistemi' })
                 .setTimestamp();
 
             try {
