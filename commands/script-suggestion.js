@@ -13,7 +13,7 @@ module.exports = {
             .setColor('#2B2D31')
             .setTitle('💡 Script Suggestion System')
             .setDescription('You can suggest scripts, games, and features you want to see in our server by clicking the button below.\n\nOur team will review your suggestions.')
-            .setImage('https://i.ibb.co/kC2gZHD/Luas-Key.png')
+            .setImage('https://i.ibb.co/jk1kcWDw/Luas-Suggestion.png') // Yeni Öneri Görseli Eklendi
             .setFooter({ text: 'Luas • Suggestion System', iconURL: interaction.guild.iconURL() });
 
         const row = new ActionRowBuilder().addComponents(
@@ -24,6 +24,6 @@ module.exports = {
         );
 
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.editReply({ content: '✅ **Script suggestion panel has been successfully set up!**' });
+        await interaction.editReply({ content: '✅ **Script suggestion panel has been successfully set up with new image!**' });
     }
 };
