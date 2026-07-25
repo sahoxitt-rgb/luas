@@ -302,7 +302,7 @@ client.on('interactionCreate', async interaction => {
                     .setColor('#0099FF')
                     .setTitle(baslik)
                     .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir.\n\n📝 **Kullanıcının Belirttiği Sorun:**\n\`\`\`${reason}\`\`\`\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
-                    .setImage('https://i.ibb.co/TM6fB7KN.png') // Biletin içine, yazının altına atılacak olan resim
+                    .setImage('https://i.ibb.co/TM6fB7KN/Luas-Ticket.png')// Biletin içine, yazının altına atılacak olan resim
                     .setFooter({ text: 'Luas • Destek Sistemi' })
                     .setTimestamp();
 
