@@ -14,26 +14,24 @@ module.exports = {
     async execute(interaction) {
         const keyIdInput = interaction.options.getString('key_id').trim();
         const UserModel = mongoose.model('User');
-
         const userData = await UserModel.findOne({ keyId: keyIdInput });
 
         if (!userData) {
             return interaction.reply({ content: '❌ Bu Key ID ile eşleşen bir sistem kaydı bulunamadı!', ephemeral: true });
         }
 
-        // HWID verisini sıfırla
         userData.hwid = null;
         await userData.save();
 
         const embed = new EmbedBuilder()
             .setColor('#00FF00')
             .setTitle('🔄 HWID Başarıyla Sıfırlandı!')
-            .setDescription(`Aşağıdaki lisansın donanım kilidi başarıyla kaldırıldı. Artık yeni bir bilgisayardan giriş yapılabilir.\n\n` +
-                            `🆔 **Key ID:** \`${userData.keyId}\`\n` +
-                            `👤 **Kullanıcı Adı:** \`${userData.username}\`\n` +
-                            `🔑 **Şifre:** ||${userData.password}|| (Gizli)\n` +
-                            `🌟 **Plan:** \`${userData.plan.toUpperCase()}\``)
-            .setFooter({ text: 'Luas License System' })
+            .setDescription(`🆔 **Key ID -->** \`${userData.keyId}\`\n` +
+                            `👤 **Kullanıcı Adı -->** \`${userData.username}\`\n` +
+                            `🔑 **Şifre -->** ||${userData.password}|| (Gizli)\n` +
+                            `🌟 **Plan -->** \`${userData.plan.toUpperCase()}\`\n\n` +
+                            `❗️ \`Bilgi:\` __**Donanım kilidi kaldırıldı. Yeni bilgisayardan giriş yapılabilir.**__`)
+            .setFooter({ text: 'Luas • Donanım Sistemi' })
             .setTimestamp();
 
         await interaction.reply({ embeds: [embed], ephemeral: true });

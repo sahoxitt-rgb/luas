@@ -9,6 +9,9 @@ const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder } = re
 const app = express();
 app.use(express.json());
 
+// ==========================================
+// MONGODB BAĞLANTISI VE ŞEMA
+// ==========================================
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://luas:luasorj@cluster0.i2qdv7n.mongodb.net/?appName=Cluster0";
 
 mongoose.connect(MONGO_URI)
@@ -27,6 +30,9 @@ const UserSchema = new mongoose.Schema({
 });
 const UserModel = mongoose.model('User', UserSchema);
 
+// ==========================================
+// EXPRESS API (ROBLOX / GİRİŞ KÖPRÜSÜ & HWID)
+// ==========================================
 const handleLogin = async (req, res) => {
     const username = req.body.username || req.body.kullanici;
     const password = req.body.password || req.body.key || req.body.sifre;
@@ -43,6 +49,7 @@ const handleLogin = async (req, res) => {
             return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
         }
 
+        // HWID Kontrolü
         if (hwid && hwid !== "" && hwid !== "nil") {
             if (!user.hwid || user.hwid === "" || user.hwid === "null") {
                 user.hwid = hwid;
@@ -52,7 +59,11 @@ const handleLogin = async (req, res) => {
             }
         }
 
-        res.json({ success: true, message: "Giriş başarılı!", plan: user.plan });
+        res.json({
+            success: true,
+            message: "Giriş başarılı!",
+            plan: user.plan
+        });
     } catch (error) {
         console.error("API Giriş Hatası:", error);
         res.status(500).json({ success: false, message: "Veritabanı hatası!" });
@@ -63,6 +74,9 @@ app.post('/login', handleLogin);
 app.post('/api/login', handleLogin);
 app.post('/api/verify', handleLogin);
 
+// ==========================================
+// DISCORD BOT & COMMAND HANDLER
+// ==========================================
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
@@ -103,6 +117,7 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
+    // KOMUT KONTROLÜ
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -117,8 +132,17 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
+    // BUTON KONTROLÜ (İngilizce butonu eklendi)
     if (interaction.isButton()) {
-        const commandName = interaction.customId.includes('free') ? 'bedava-key' : 'ozel-key';
+        let commandName = '';
+        if (interaction.customId === 'get_free_key') {
+            commandName = 'bedava-key';
+        } else if (interaction.customId === 'get_free_key_en') {
+            commandName = 'free-key';
+        } else {
+            commandName = 'ozel-key';
+        }
+        
         const command = client.commands.get(commandName);
         if (command && typeof command.handleButton === 'function') {
             await command.handleButton(interaction, UserModel);
@@ -126,6 +150,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
+    // MODAL (FORM) KONTROLÜ - ÖZEL KEY OLUŞTURMA
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
@@ -137,9 +162,10 @@ client.on('interactionCreate', async interaction => {
             try {
                 const existing = await UserModel.findOne({ username: username, password: password });
                 if (existing) {
-                    return interaction.editReply({ content: '⚠️ Bu kullanıcı adı ve key zaten veritabanında kayıtlı!' });
+                    return interaction.editReply({ content: '⚠️ **Bu kullanıcı adı ve key zaten veritabanında kayıtlı!**' });
                 }
 
+                // 6 haneli rastgele ID
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
 
                 const newUser = new UserModel({
@@ -153,30 +179,34 @@ client.on('interactionCreate', async interaction => {
                 });
                 await newUser.save();
 
+                // YENİ TASARIMLI LOG MESAJI
                 const replyEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
+                    .setColor('#FFD700') // Premium Sarısı
                     .setTitle('💎 Özel Key Oluşturuldu')
-                    .setDescription(`🚀 **Özel Key -->** \`${password}\`\n` +
-                                    `ID **Özel Key ID -->** \`${uniqueKeyId}\`\n` +
-                                    `🪄 **Key'i Oluşturan Kişi -->** <@${interaction.user.id}>\n` +
+                    .setDescription(`🚀 **Sistem -->** \`Luas Premium\`\n` +
+                                    `🔑 **Özel Key -->** \`${password}\`\n` +
+                                    `🆔 **Özel Key ID -->** \`${uniqueKeyId}\`\n` +
+                                    `🪄 **Oluşturan Kişi -->** <@${interaction.user.id}>\n` +
                                     `👑 **Key Sahibi -->** \`${username}\`\n` +
-                                    `📝 **Key'in Oluşturulma Sebebi -->** Premium Erişim\n` +
-                                    `⏰ **Key'in Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-                                    `⏱️ **Key'in Bitiş Zamanı -->** \`${duration}\`\n\n` +
-                                    `❗️ **Dikkat!!** \`KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN\``)
+                                    `📝 **Oluşturulma Sebebi -->** Premium Erişim\n` +
+                                    `⏰ **Oluşturulma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
+                                    `⏱️ **Bitiş Zamanı -->** \`${duration}\`\n\n` +
+                                    `❗️ \`Dikkat!!\` __**KEY TEK KULLANIMLIKTIR KİMSE İLE PAYLAŞMAYIN**__`)
                     .setFooter({ text: 'Luas • Premium Lisans Sistemi' })
                     .setTimestamp();
 
+                // Eğer log kanalı ayarlıysa oraya at
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
                     if (logChannel) await logChannel.send({ embeds: [replyEmbed] }).catch(() => {});
                 }
 
+                // Yetkiliye de mesajı göster
                 await interaction.editReply({ embeds: [replyEmbed] });
             } catch (err) {
                 console.error(err);
-                await interaction.editReply({ content: '❌ Veritabanına kayıt eklenirken hata oluştu!' });
+                await interaction.editReply({ content: '❌ **Veritabanına kayıt eklenirken hata oluştu!**' });
             }
         }
     }
