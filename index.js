@@ -22,115 +22,63 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log("✅ MongoDB bağlantısı başarılı!"))
     .catch(err => console.error("⛔ MongoDB bağlantı hatası:", err));
 
-const UserSchema = new mongoose.Schema({
-    username: { type: String, required: true },
-    password: { type: String, required: true },
-    keyId: { type: String, required: true, unique: true }, 
-    hwid: { type: String, default: null },
-    plan: { type: String, default: "free" },
-    duration: { type: String, default: "Sınırsız" },
-    discordId: { type: String, default: null },
-    creatorTag: { type: String, default: "Sistem / Bilinmiyor" }
-});
+const UserSchema = new mongoose.Schema({ username: { type: String, required: true }, password: { type: String, required: true }, keyId: { type: String, required: true, unique: true }, hwid: { type: String, default: null }, plan: { type: String, default: "free" }, duration: { type: String, default: "Sınırsız" }, discordId: { type: String, default: null }, creatorTag: { type: String, default: "Sistem / Bilinmiyor" } });
 const UserModel = mongoose.model('User', UserSchema);
 
-const TicketSchema = new mongoose.Schema({
-    id: { type: String, default: "ticket" },
-    count: { type: Number, default: 0 }
-});
+const TicketSchema = new mongoose.Schema({ id: { type: String, default: "ticket" }, count: { type: Number, default: 0 } });
 const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
-const ConfigSchema = new mongoose.Schema({
-    id: { type: String, default: "config" },
-    tr_ss_channel: { type: String, default: null },
-    en_ss_channel: { type: String, default: null }
-});
+const ConfigSchema = new mongoose.Schema({ id: { type: String, default: "config" }, tr_ss_channel: { type: String, default: null }, en_ss_channel: { type: String, default: null } });
 const ConfigModel = mongoose.model('Config', ConfigSchema);
 
 // ==========================================
-// EXPRESS API
+// EXPRESS API (KÖPRÜ)
 // ==========================================
 const handleLogin = async (req, res) => {
-    const username = req.body.username || req.body.kullanici;
-    const password = req.body.password || req.body.key || req.body.sifre;
-    const hwid = req.body.hwid || req.body.HID || req.body.hardwareId;
-
-    if (!username || !password) return res.json({ success: false, message: "Kullanıcı adı veya şifre boş bırakılamaz!" });
-
+    const username = req.body.username || req.body.kullanici; const password = req.body.password || req.body.key || req.body.sifre; const hwid = req.body.hwid || req.body.HID || req.body.hardwareId;
+    if (!username || !password) return res.json({ success: false, message: "Boş bırakılamaz!" });
     try {
-        const user = await UserModel.findOne({ username: username, password: password });
-        if (!user) return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
-
+        const user = await UserModel.findOne({ username, password });
+        if (!user) return res.json({ success: false, message: "Geçersiz giriş!" });
         if (hwid && hwid !== "" && hwid !== "nil") {
-            if (!user.hwid || user.hwid === "" || user.hwid === "null") {
-                user.hwid = hwid;
-                await user.save();
-            } else if (user.hwid !== hwid) {
-                return res.json({ success: false, message: "Bu key başka bir cihaza (HWID) kayıtlı!" });
-            }
+            if (!user.hwid || user.hwid === "" || user.hwid === "null") { user.hwid = hwid; await user.save(); } 
+            else if (user.hwid !== hwid) return res.json({ success: false, message: "Başka cihaza kayıtlı!" });
         }
         res.json({ success: true, message: "Giriş başarılı!", plan: user.plan });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Veritabanı hatası!" });
-    }
+    } catch (error) { res.status(500).json({ success: false, message: "Veritabanı hatası!" }); }
 };
 
-app.post('/login', handleLogin);
-app.post('/api/login', handleLogin);
-app.post('/api/verify', handleLogin);
+app.post('/login', handleLogin); app.post('/api/login', handleLogin); app.post('/api/verify', handleLogin);
 
 // ==========================================
-// DISCORD BOT & COMMAND HANDLER 
+// DISCORD BOT & İZİNLER
 // ==========================================
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildMembers 
-    ]
+    intents: [ GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers ]
 });
 
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-
 const commandArray = [];
 for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    const command = require(filePath);
-    if ('data' in command && 'execute' in command) {
-        client.commands.set(command.data.name, command);
-        commandArray.push(command.data.toJSON());
-    }
+    const command = require(path.join(commandsPath, file));
+    if ('data' in command && 'execute' in command) { client.commands.set(command.data.name, command); commandArray.push(command.data.toJSON()); }
 }
 
 client.once('clientReady', async () => {
-    console.log(`🤖 Discord botu aktif edildi! Giriş: ${client.user.tag}`);
+    console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
-    // --- 7/24 SESE BAĞLANMA (ÇÖKME KORUMALI) ---
+    // --- 7/24 SESE BAĞLANMA ---
     const voiceChannelId = ayarlar.SES_KANAL_ID;
     if (voiceChannelId) {
         const channel = client.channels.cache.get(voiceChannelId);
         if (channel && channel.isVoiceBased()) {
             try {
-                const connection = joinVoiceChannel({
-                    channelId: channel.id,
-                    guildId: channel.guild.id,
-                    adapterCreator: channel.guild.voiceAdapterCreator,
-                    selfDeaf: true,
-                    selfMute: true
-                });
-
-                connection.on('error', (error) => {
-                    console.log(`⚠️ Ses Bağlantı Uyarı: ${error.message}`);
-                });
-
+                const connection = joinVoiceChannel({ channelId: channel.id, guildId: channel.guild.id, adapterCreator: channel.guild.voiceAdapterCreator, selfDeaf: true, selfMute: true });
+                connection.on('error', (error) => console.log(`⚠️ Ses Uyarı: ${error.message}`));
                 console.log(`🔊 7/24 Ses kanalına bağlanıldı: ${channel.name}`);
-            } catch (e) {
-                console.log(`⚠️ Sese bağlanılamadı: ${e.message}`);
-            }
+            } catch (e) { console.log(`⚠️ Sese bağlanılamadı.`); }
         }
     }
 
@@ -139,23 +87,12 @@ client.once('clientReady', async () => {
     if (botLogChannelId) {
         const logChannel = client.channels.cache.get(botLogChannelId);
         if (logChannel) {
-            const startEmbed = new EmbedBuilder()
-                .setColor('#00FF00')
-                .setTitle('🟢 Sistem Aktif (Bot Başlatıldı)')
-                .setDescription(`🤖 **Bot Adı -->** \`${client.user.tag}\`\n` +
-                                `📡 **Gecikme (Ping) -->** \`${client.ws.ping}ms\`\n` +
-                                `⏰ **Aktif Olma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
-                                `✅ **Bütün sistemler tıkır tıkır çalışıyor.**`)
-                .setThumbnail(client.user.displayAvatarURL({ dynamic: true }))
-                .setFooter({ text: 'Luas • Sistem Durumu' })
-                .setTimestamp();
+            const startEmbed = new EmbedBuilder().setColor('#00FF00').setTitle('🟢 Sistem Aktif (Bot Başlatıldı)').setDescription(`🤖 **Bot Adı -->** \`${client.user.tag}\`\n📡 **Ping -->** \`${client.ws.ping}ms\`\n⏰ **Aktif Olma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n✅ **Bütün sistemler tıkır tıkır çalışıyor.**`).setThumbnail(client.user.displayAvatarURL({ dynamic: true })).setTimestamp();
             await logChannel.send({ embeds: [startEmbed] }).catch(() => {});
         }
     }
 
-    // ==========================================
-    // 30 DAKİKADA BİR PERİYODİK SAĞLIK RAPORU
-    // ==========================================
+    // --- 30 DAKİKADA BİR SAĞLIK RAPORU ---
     setInterval(async () => {
         const reportChannelId = ayarlar.RAPOR_LOG_KANAL_ID;
         if (!reportChannelId) return;
@@ -163,97 +100,76 @@ client.once('clientReady', async () => {
         if (!channel) return;
 
         const dbStatus = mongoose.connection.readyState === 1 ? '🟢 Çalışıyor (Bağlı)' : '🔴 Kesintide';
-        const botStatus = client.ws.status === 0 ? '🟢 Aktif (Ready)' : '🟡 Bağlanıyor / Sorunlu';
-        const apiStatus = '🟢 Çalışıyor (Aktif)';
+        const botStatus = client.ws.status === 0 ? '🟢 Aktif' : '🟡 Sorunlu';
         
-        let voiceStatus = '⚪ Ayarlanmamış';
-        if (voiceChannelId) {
-            const vChannel = client.channels.cache.get(voiceChannelId);
-            voiceStatus = vChannel ? `🟢 Seste (${vChannel.name})` : '🟡 Kanal Bulunamadı';
-        }
-
-        const reportEmbed = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle('📊 Periyodik Sistem Sağlık Raporu (30 Dakika)')
-            .setDescription('Sistemin anlık durum raporu aşağıdadır. **Herhangi bir sıkıntı tespit edilmemiştir, tüm sistemler kusursuz çalışmaktadır.**')
-            .addFields(
-                { name: '🗄️ Veritabanı (MongoDB)', value: `\`${dbStatus}\``, inline: true },
-                { name: '🌐 Web API', value: `\`${apiStatus}\``, inline: true },
-                { name: '🤖 Bot Durumu', value: `\`${botStatus}\``, inline: true },
-                { name: '🔊 7/24 Ses Durumu', value: `\`${voiceStatus}\``, inline: true },
-                { name: '📡 Anlık Ping', value: `\`${client.ws.ping}ms\``, inline: true },
-                { name: '⏰ Rapor Zamanı', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
-            )
-            .setFooter({ text: 'Luas • Otomatik Sağlık Denetçisi' })
-            .setTimestamp();
-
+        const reportEmbed = new EmbedBuilder().setColor('#00FF00').setTitle('📊 Periyodik Sistem Raporu (30 Dk)').addFields({ name: '🗄️ Veritabanı', value: `\`${dbStatus}\``, inline: true }, { name: '🤖 Bot Durumu', value: `\`${botStatus}\``, inline: true }, { name: '📡 Ping', value: `\`${client.ws.ping}ms\``, inline: true }).setTimestamp();
         await channel.send({ embeds: [reportEmbed] }).catch(() => {});
     }, 30 * 60 * 1000); 
 
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
-        if (process.env.GUILD_ID) {
-            await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: commandArray });
-        } else {
-            await rest.put(Routes.applicationCommands(client.user.id), { body: commandArray });
-        }
+        if (process.env.GUILD_ID) { await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: commandArray }); } 
+        else { await rest.put(Routes.applicationCommands(client.user.id), { body: commandArray }); }
     } catch (error) { console.error("⛔ Komut yükleme hatası:", error); }
 });
 
-// ==========================================
-// ANLIK HATA YAKALAYICI (ERROR ALERTING)
-// ==========================================
+// --- HATA YAKALAYICILAR ---
 async function sendErrorLog(errorText) {
     const errorChannelId = ayarlar.HATA_LOG_KANAL_ID;
     if (!errorChannelId) return;
     const channel = client.channels.cache.get(errorChannelId);
     if (!channel) return;
-
-    const errEmbed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('🚨 Kritik Sistem Hatası Tespit Edildi!')
-        .setDescription(`Bot içerisinde bir hata oluştu ve raporlandı:\n\`\`\`js\n${errorText.substring(0, 1900)}\n\`\`\``)
-        .setFooter({ text: 'Luas • Otomatik Hata Raporlayıcı' })
-        .setTimestamp();
-
+    const errEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('🚨 Sistem Hatası!').setDescription(`\`\`\`js\n${errorText.substring(0, 1900)}\n\`\`\``).setTimestamp();
     await channel.send({ embeds: [errEmbed] }).catch(() => {});
 }
+process.on('unhandledRejection', async (error) => await sendErrorLog(error.stack || error.message || String(error)));
+process.on('uncaughtException', async (error) => await sendErrorLog(error.stack || error.message || String(error)));
 
-process.on('unhandledRejection', async (error) => {
-    console.error('Unhandled Rejection:', error);
-    await sendErrorLog(error.stack || error.message || String(error));
-});
+// ==========================================
+// BOOST DEDEKTÖRÜ VE BOOST OTO ROL SİSTEMİ
+// ==========================================
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    if (!oldMember.premiumSince && newMember.premiumSince) {
+        
+        // 1. Boost Basanlara Oto-Rol Verme
+        const boostRolId = "1531013766945308863";
+        const boostRol = newMember.guild.roles.cache.get(boostRolId);
+        if (boostRol) {
+            await newMember.roles.add(boostRol).catch(() => {});
+        }
 
-process.on('uncaughtException', async (error) => {
-    console.error('Uncaught Exception:', error);
-    await sendErrorLog(error.stack || error.message || String(error));
+        // 2. Boost Log Mesajı
+        const boostChannelId = ayarlar.BOOST_LOG_KANAL_ID;
+        if (boostChannelId) {
+            const channel = newMember.guild.channels.cache.get(boostChannelId);
+            if (channel) {
+                const boostEmbed = new EmbedBuilder()
+                    .setColor('#FF73FA') 
+                    .setTitle('🚀 Sunucuya Yeni Takviye (Boost) Basıldı!')
+                    .setDescription(`🎉 Çok teşekkürler <@${newMember.id}>! Sunucumuza boost basarak bize büyük destek oldun ve özel rolünü kazandın!\n\n` +
+                                    `💎 **Sunucu Takviye Seviyesi:** \`${newMember.guild.premiumTier}\`\n` +
+                                    `📈 **Toplam Boost Sayısı:** \`${newMember.guild.premiumSubscriptionCount}\``)
+                    .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+                    .setFooter({ text: 'Luas • Boost Sistemi' })
+                    .setTimestamp();
+                
+                await channel.send({ content: `Hey <@${newMember.id}>, desteğin için teşekkürler! 💖`, embeds: [boostEmbed] }).catch(() => {});
+            }
+        }
+    }
 });
 
 // ==========================================
-// YENİ: MESAJ SİLİNME DEDEKTÖRÜ (LOG SİSTEMİ)
+// SİLİNEN MESAJ LOGU
 // ==========================================
 client.on('messageDelete', async message => {
-    // Botların kendi sildiği mesajları loglamasın ki kalabalık yapmasın
     if (!message.author || message.author.bot) return;
-    if (!message.guild) return;
-
     const logChannelId = ayarlar.MESAJ_LOG_KANAL_ID;
     if (logChannelId) {
         const channel = message.guild.channels.cache.get(logChannelId);
         if (channel) {
-            const content = message.content ? message.content : '*[Sadece Medya veya Dosya]*';
-
-            const logEmbed = new EmbedBuilder()
-                .setColor('#FF0000')
-                .setTitle('🗑️ Bir Mesaj Silindi')
-                .setDescription(`👤 **Kullanıcı -->** <@${message.author.id}>\n` +
-                                `📁 **Kanal -->** <#${message.channel.id}>\n` +
-                                `⏰ **Silinme Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
-                                `📝 **Mesaj İçeriği:**\n\`\`\`${content.substring(0, 1000)}\`\`\``)
-                .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
-                .setFooter({ text: 'Luas • Log Sistemi' })
-                .setTimestamp();
-
+            const content = message.content ? message.content : '*[Medya/Dosya]*';
+            const logEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('🗑️ Bir Mesaj Silindi').setDescription(`👤 **Kullanıcı -->** <@${message.author.id}>\n📁 **Kanal -->** <#${message.channel.id}>\n\n📝 **İçerik:**\n\`\`\`${content.substring(0, 1000)}\`\`\``).setTimestamp();
             await channel.send({ embeds: [logEmbed] }).catch(() => {});
         }
     }
@@ -399,9 +315,17 @@ client.on('messageCreate', async message => {
 });
 
 // ==========================================
-// JOIN & LEAVE 
+// GİRİŞ/ÇIKIŞ LOG VE İLK GELENLERE OTO ROL
 // ==========================================
 client.on('guildMemberAdd', async member => {
+    // 1. Yeni Gelenlere Oto Rol Verme
+    const otoRolId = "1531015008815677620";
+    const otoRol = member.guild.roles.cache.get(otoRolId);
+    if (otoRol) {
+        await member.roles.add(otoRol).catch(() => {});
+    }
+
+    // 2. DM Gönderme
     try {
         const dmEmbed = new EmbedBuilder()
             .setColor('#00FF00')
@@ -411,6 +335,7 @@ client.on('guildMemberAdd', async member => {
         await member.send({ embeds: [dmEmbed] }).catch(() => {});
     } catch (err) {}
 
+    // 3. Giriş Logu
     const joinChannelId = ayarlar.JOIN_LOG_KANAL_ID;
     if (joinChannelId) {
         const channel = member.guild.channels.cache.get(joinChannelId);
