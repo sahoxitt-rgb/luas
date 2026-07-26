@@ -382,7 +382,7 @@ client.on('interactionCreate', async interaction => {
         const { customId } = interaction;
 
         // ========================================================
-        // DİKKAT! KANALI GİZLEYİP AÇAN KUSURSUZ SİSTEM BURADA
+        // DİKKAT! KANALI GİZLEYİP AÇAN VE YENİ ROLÜ VEREN KISIM
         // ========================================================
         if (customId === 'verify_tr' || customId === 'verify_en') {
             await interaction.deferReply({ ephemeral: true });
@@ -391,26 +391,31 @@ client.on('interactionCreate', async interaction => {
             const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
             const role = interaction.guild.roles.cache.get(roleId);
             
+            // Yeni istediğin ortak rol ID'si
+            const verifyOrtakRolId = "1531054330852020277"; 
+            const verifyOrtakRol = interaction.guild.roles.cache.get(verifyOrtakRolId);
+
             const verifyChannelId = "1530994032900313219"; // Kayıt (Verify) kanalı
             const targetChannelId = isTR ? "1530995336229945426" : "1530996048254734499"; // SS kanalları
 
             const verifyChannel = interaction.guild.channels.cache.get(verifyChannelId);
             const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
 
-            if (!role) return interaction.editReply({ content: '❌ **Rol bulunamadı! Lütfen yetkiliye bildirin.**' });
+            if (!role && !verifyOrtakRol) return interaction.editReply({ content: '❌ **Rol bulunamadı! Lütfen yetkiliye bildirin.**' });
 
             try {
-                // 1. Dil Rolünü ver
-                await interaction.member.roles.add(role);
+                // 1. DİL ROLÜNÜ VE İSTEDİĞİN YENİ ORTAK ROLÜ VER
+                if (role) await interaction.member.roles.add(role);
+                if (verifyOrtakRol) await interaction.member.roles.add(verifyOrtakRol);
                 
-                // 2. KAYIT KANALINI O KİŞİYE GİZLE (Puff diye yok olacak)
+                // 2. KAYIT KANALINI O KİŞİYE GİZLE
                 if (verifyChannel) {
                     await verifyChannel.permissionOverwrites.create(interaction.user.id, {
                         ViewChannel: false
                     }).catch(() => {});
                 }
 
-                // 3. SADECE SS KANALINI GÖRME İZNİ VER (Başka hiçbir yeri göremez)
+                // 3. SADECE SS KANALINI GÖRME İZNİ VER
                 if (targetChannel) {
                     await targetChannel.permissionOverwrites.create(interaction.user.id, {
                         ViewChannel: true,
