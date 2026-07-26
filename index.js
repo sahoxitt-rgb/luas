@@ -188,7 +188,7 @@ client.once('clientReady', async () => {
             .setTimestamp();
 
         await channel.send({ embeds: [reportEmbed] }).catch(() => {});
-    }, 30 * 60 * 1000); // 30 Dakika
+    }, 30 * 60 * 1000); 
 
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
@@ -227,6 +227,36 @@ process.on('unhandledRejection', async (error) => {
 process.on('uncaughtException', async (error) => {
     console.error('Uncaught Exception:', error);
     await sendErrorLog(error.stack || error.message || String(error));
+});
+
+// ==========================================
+// YENİ: MESAJ SİLİNME DEDEKTÖRÜ (LOG SİSTEMİ)
+// ==========================================
+client.on('messageDelete', async message => {
+    // Botların kendi sildiği mesajları loglamasın ki kalabalık yapmasın
+    if (!message.author || message.author.bot) return;
+    if (!message.guild) return;
+
+    const logChannelId = ayarlar.MESAJ_LOG_KANAL_ID;
+    if (logChannelId) {
+        const channel = message.guild.channels.cache.get(logChannelId);
+        if (channel) {
+            const content = message.content ? message.content : '*[Sadece Medya veya Dosya]*';
+
+            const logEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('🗑️ Bir Mesaj Silindi')
+                .setDescription(`👤 **Kullanıcı -->** <@${message.author.id}>\n` +
+                                `📁 **Kanal -->** <#${message.channel.id}>\n` +
+                                `⏰ **Silinme Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
+                                `📝 **Mesaj İçeriği:**\n\`\`\`${content.substring(0, 1000)}\`\`\``)
+                .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
+                .setFooter({ text: 'Luas • Log Sistemi' })
+                .setTimestamp();
+
+            await channel.send({ embeds: [logEmbed] }).catch(() => {});
+        }
+    }
 });
 
 // ==========================================
