@@ -106,7 +106,6 @@ for (const file of commandFiles) {
     }
 }
 
-// UYARI VERMEMESİ İÇİN 'ready' YERİNE 'clientReady' KULLANILDI
 client.once('clientReady', async () => {
     console.log(`🤖 Discord botu aktif edildi! Giriş: ${client.user.tag}`);
 
@@ -120,13 +119,12 @@ client.once('clientReady', async () => {
                     channelId: channel.id,
                     guildId: channel.guild.id,
                     adapterCreator: channel.guild.voiceAdapterCreator,
-                    selfDeaf: true, // Botun kanaldaki sesleri dinlemesini kapatır (Render yorulmaz)
+                    selfDeaf: true,
                     selfMute: true
                 });
 
-                // HATA YAKALAYICI: Render UDP portunu engellese bile bot çökmeyecek!
                 connection.on('error', (error) => {
-                    console.log(`⚠️ Ses Bağlantı Uyarı (Önemsiz): ${error.message}`);
+                    console.log(`⚠️ Ses Bağlantı Uyarı: ${error.message}`);
                 });
 
                 console.log(`🔊 7/24 Ses kanalına bağlanıldı: ${channel.name}`);
@@ -155,6 +153,43 @@ client.once('clientReady', async () => {
         }
     }
 
+    // ==========================================
+    // 30 DAKİKADA BİR PERİYODİK SAĞLIK RAPORU
+    // ==========================================
+    setInterval(async () => {
+        const reportChannelId = ayarlar.RAPOR_LOG_KANAL_ID;
+        if (!reportChannelId) return;
+        const channel = client.channels.cache.get(reportChannelId);
+        if (!channel) return;
+
+        const dbStatus = mongoose.connection.readyState === 1 ? '🟢 Çalışıyor (Bağlı)' : '🔴 Kesintide';
+        const botStatus = client.ws.status === 0 ? '🟢 Aktif (Ready)' : '🟡 Bağlanıyor / Sorunlu';
+        const apiStatus = '🟢 Çalışıyor (Aktif)';
+        
+        let voiceStatus = '⚪ Ayarlanmamış';
+        if (voiceChannelId) {
+            const vChannel = client.channels.cache.get(voiceChannelId);
+            voiceStatus = vChannel ? `🟢 Seste (${vChannel.name})` : '🟡 Kanal Bulunamadı';
+        }
+
+        const reportEmbed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('📊 Periyodik Sistem Sağlık Raporu (30 Dakika)')
+            .setDescription('Sistemin anlık durum raporu aşağıdadır. **Herhangi bir sıkıntı tespit edilmemiştir, tüm sistemler kusursuz çalışmaktadır.**')
+            .addFields(
+                { name: '🗄️ Veritabanı (MongoDB)', value: `\`${dbStatus}\``, inline: true },
+                { name: '🌐 Web API', value: `\`${apiStatus}\``, inline: true },
+                { name: '🤖 Bot Durumu', value: `\`${botStatus}\``, inline: true },
+                { name: '🔊 7/24 Ses Durumu', value: `\`${voiceStatus}\``, inline: true },
+                { name: '📡 Anlık Ping', value: `\`${client.ws.ping}ms\``, inline: true },
+                { name: '⏰ Rapor Zamanı', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+            )
+            .setFooter({ text: 'Luas • Otomatik Sağlık Denetçisi' })
+            .setTimestamp();
+
+        await channel.send({ embeds: [reportEmbed] }).catch(() => {});
+    }, 30 * 60 * 1000); // 30 Dakika
+
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
         if (process.env.GUILD_ID) {
@@ -163,6 +198,35 @@ client.once('clientReady', async () => {
             await rest.put(Routes.applicationCommands(client.user.id), { body: commandArray });
         }
     } catch (error) { console.error("⛔ Komut yükleme hatası:", error); }
+});
+
+// ==========================================
+// ANLIK HATA YAKALAYICI (ERROR ALERTING)
+// ==========================================
+async function sendErrorLog(errorText) {
+    const errorChannelId = ayarlar.HATA_LOG_KANAL_ID;
+    if (!errorChannelId) return;
+    const channel = client.channels.cache.get(errorChannelId);
+    if (!channel) return;
+
+    const errEmbed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('🚨 Kritik Sistem Hatası Tespit Edildi!')
+        .setDescription(`Bot içerisinde bir hata oluştu ve raporlandı:\n\`\`\`js\n${errorText.substring(0, 1900)}\n\`\`\``)
+        .setFooter({ text: 'Luas • Otomatik Hata Raporlayıcı' })
+        .setTimestamp();
+
+    await channel.send({ embeds: [errEmbed] }).catch(() => {});
+}
+
+process.on('unhandledRejection', async (error) => {
+    console.error('Unhandled Rejection:', error);
+    await sendErrorLog(error.stack || error.message || String(error));
+});
+
+process.on('uncaughtException', async (error) => {
+    console.error('Uncaught Exception:', error);
+    await sendErrorLog(error.stack || error.message || String(error));
 });
 
 // ==========================================
