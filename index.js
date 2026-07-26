@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const Tesseract = require('tesseract.js'); // YAPAY ZEKA MODÜLÜ
+const Tesseract = require('tesseract.js'); 
 
 const ayarlar = require('./roller.js');
 
@@ -39,24 +39,27 @@ const TicketSchema = new mongoose.Schema({
 });
 const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
+// YENİ: KANAL AYARLARI (Panel Kurulan Kanalları Tutar)
+const ConfigSchema = new mongoose.Schema({
+    id: { type: String, default: "config" },
+    tr_ss_channel: { type: String, default: null },
+    en_ss_channel: { type: String, default: null }
+});
+const ConfigModel = mongoose.model('Config', ConfigSchema);
+
 // ==========================================
-// EXPRESS API (ROBLOX / GİRİŞ KÖPRÜSÜ & HWID)
+// EXPRESS API
 // ==========================================
 const handleLogin = async (req, res) => {
     const username = req.body.username || req.body.kullanici;
     const password = req.body.password || req.body.key || req.body.sifre;
     const hwid = req.body.hwid || req.body.HID || req.body.hardwareId;
 
-    if (!username || !password) {
-        return res.json({ success: false, message: "Kullanıcı adı veya şifre boş bırakılamaz!" });
-    }
+    if (!username || !password) return res.json({ success: false, message: "Kullanıcı adı veya şifre boş bırakılamaz!" });
 
     try {
         const user = await UserModel.findOne({ username: username, password: password });
-
-        if (!user) {
-            return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
-        }
+        if (!user) return res.json({ success: false, message: "Geçersiz kullanıcı adı veya şifre!" });
 
         if (hwid && hwid !== "" && hwid !== "nil") {
             if (!user.hwid || user.hwid === "" || user.hwid === "null") {
@@ -66,10 +69,8 @@ const handleLogin = async (req, res) => {
                 return res.json({ success: false, message: "Bu key başka bir cihaza (HWID) kayıtlı!" });
             }
         }
-
         res.json({ success: true, message: "Giriş başarılı!", plan: user.plan });
     } catch (error) {
-        console.error("API Giriş Hatası:", error);
         res.status(500).json({ success: false, message: "Veritabanı hatası!" });
     }
 };
@@ -79,14 +80,14 @@ app.post('/api/login', handleLogin);
 app.post('/api/verify', handleLogin);
 
 // ==========================================
-// DISCORD BOT & COMMAND HANDLER
+// DISCORD BOT & COMMAND HANDLER 
 // ==========================================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent, // SS Okuma ve yazı silme için zorunlu
-        GatewayIntentBits.GuildMembers    // Join/Leave için zorunlu
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers 
     ]
 });
 
@@ -114,62 +115,56 @@ client.once('ready', async () => {
         } else {
             await rest.put(Routes.applicationCommands(client.user.id), { body: commandArray });
         }
-    } catch (error) {
-        console.error("⛔ Komut yükleme hatası:", error);
-    }
+    } catch (error) { console.error("⛔ Komut yükleme hatası:", error); }
 });
 
 // ==========================================
 // YAZI ENGEL VE YAPAY ZEKA ABONE SS KONTROLÜ
 // ==========================================
-let queueCount = 0; // Yapay zeka sıra sistemi
+let queueCount = 0; 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // Kanal kontrolü
-    if (message.channel.id === ayarlar.ABONE_SS_KANAL_ID || message.channel.id === ayarlar.SUBSCRIBER_SS_KANAL_ID) {
-        const isTR = message.channel.id === ayarlar.ABONE_SS_KANAL_ID;
+    // Veritabanından hangi kanalların kurulduğunu çek
+    const config = await ConfigModel.findOne({ id: "config" });
+    if (!config) return;
 
-        // 1. Resim yoksa uyarıp siler (Yazı engelleme)
+    if (message.channel.id === config.tr_ss_channel || message.channel.id === config.en_ss_channel) {
+        const isTR = message.channel.id === config.tr_ss_channel;
+
+        // 1. Resim yoksa uyarıp sil
         if (message.attachments.size === 0) {
             await message.delete().catch(() => {});
-            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Bu kanala SS (resim) dışında bir şey atılamaz! Mesajınız silindi.**` });
+            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Bu kanala fotoğraf dışında bir şey atılamaz! Mesajınız silindi.**` });
             setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
             return;
         }
 
         const attachment = message.attachments.first();
-        // 2. Eklenen dosya resim değilse
-        if (!attachment.contentType || !attachment.contentType.startsWith('image/')) {
+        // 2. Eklenen dosya resim değilse veya GIF ise SİL
+        if (!attachment.contentType || !attachment.contentType.startsWith('image/') || attachment.contentType === 'image/gif') {
             await message.delete().catch(() => {});
-            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Geçersiz dosya! Sadece fotoğraf yükleyebilirsiniz.**` });
+            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Geçersiz dosya veya GIF! Sadece fotoğraf (PNG/JPG) yükleyebilirsiniz.**` });
             setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
             return;
         }
 
-        // 3. Geçerli Resim Yüklendi -> Yapay Zeka İşlemi Başlıyor
         queueCount++;
         const processingMsg = await message.reply({ 
             content: `🤖 **Luas Yapay Zeka** tarafından SS'iniz inceleniyor...\n⏳ *Lütfen bekleyiniz. Tahmini bekleme süresi: 5-15 saniye.*\n📊 *Resim Sırası: ${queueCount}*` 
         });
 
         try {
-            // Tesseract ile Resmi Okuma
-            const { data: { text } } = await Tesseract.recognize(
-                attachment.url,
-                isTR ? 'tur' : 'eng'
-            );
-
-            // Okunan metni analiz etme
+            const { data: { text } } = await Tesseract.recognize(attachment.url, isTR ? 'tur' : 'eng');
             const lowerText = text.toLowerCase().replace(/\s+/g, ' '); 
             
-            // 1. Şart: Luasscript ismi olmalı
             const hasName = lowerText.includes('luasscript') || lowerText.includes('luas script') || lowerText.includes('@luasscript');
-            
-            // 2. Şart: Abone olundu yazısı olmalı (TR/EN)
             const hasSub = isTR ? (lowerText.includes('abone olundu') || lowerText.includes('abone eklendi')) : (lowerText.includes('subscribed'));
 
             const logChannel = message.guild.channels.cache.get(ayarlar.ABONE_LOG_KANAL_ID);
+            const joinedTimestamp = Math.floor(message.member.joinedTimestamp / 1000);
+            const isTurkishUser = message.member.roles.cache.has(ayarlar.TR_ROL_ID);
+            const langText = isTurkishUser ? 'Türkçe (TR)' : 'English (EN)';
 
             if (hasName && hasSub) {
                 // BAŞARILI DURUM
@@ -177,42 +172,47 @@ client.on('messageCreate', async message => {
                 const role = message.guild.roles.cache.get(roleId);
                 if (role) await message.member.roles.add(role).catch(() => {});
 
-                // Kullanıcıya DM
+                // Sade DM
                 const dmEmbed = new EmbedBuilder()
                     .setColor('#00FF00')
                     .setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!')
                     .setDescription(isTR 
-                        ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.\nBizi desteklediğiniz için teşekkür ederiz!`
-                        : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.\nThank you for your support!`)
+                        ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.`
+                        : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.`)
                     .setTimestamp();
                 await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
 
-                // Log Kanalına Düşme
+                // Detaylı Log
                 if (logChannel) {
                     const logEmbed = new EmbedBuilder()
                         .setColor('#00FF00')
                         .setTitle('✅ Başarılı Abone Onayı')
-                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n🌍 **Kanal:** \`${isTR ? 'Türkçe' : 'İngilizce'}\`\n🤖 **Yapay Zeka Durumu:** Kusursuz Onay`)
+                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n` +
+                                        `🏷️ **İsim:** \`${message.author.tag}\`\n` +
+                                        `🆔 **ID:** \`${message.author.id}\`\n` +
+                                        `📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n` +
+                                        `🌍 **Kayıtlı Dil:** \`${langText}\`\n` +
+                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>\n\n` +
+                                        `🤖 **Yapay Zeka (AI) Çıktısı:**\n\`\`\`${lowerText.substring(0, 800)}\`\`\``)
                         .setImage(attachment.url)
                         .setTimestamp();
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
 
                 await processingMsg.edit({ content: `✅ **Onaylandı!** Rolünüz başarıyla verildi. <@${message.author.id}>` });
-                
                 setTimeout(() => {
                     processingMsg.delete().catch(() => {});
                     message.delete().catch(() => {});
                 }, 5000);
 
             } else {
-                // BAŞARISIZ DURUM
+                // BAŞARISIZ DURUM (Sade Uyarı)
                 const dmEmbed = new EmbedBuilder()
                     .setColor('#FF0000')
                     .setTitle(isTR ? '❌ Aboneliğiniz Onaylanmadı' : '❌ Subscription Failed')
                     .setDescription(isTR 
-                        ? `Maalesef attığınız ekran görüntüsü yapay zeka tarafından reddedildi.\n\n**Sebepler:**\n- Ekranda **@LuaSscript** yazısı okunmuyor.\n- **Abone olundu** butonu görünmüyor.\n- Veya alakasız bir resim attınız.\n\nLütfen net bir SS alıp kanalda tekrar deneyin.`
-                        : `Unfortunately, your screenshot was rejected by the AI.\n\n**Reasons:**\n- **@LuaSscript** text is not readable.\n- **Subscribed** button is missing.\n- Irrelevant image.\n\nPlease take a clear screenshot and try again.`)
+                        ? `Maalesef gönderdiğiniz görsel yapay zeka tarafından reddedildi.\n\nLütfen görselin doğruluğunu kontrol edip geçerli bir SS ile tekrar deneyin.`
+                        : `Unfortunately, your screenshot was rejected by the AI.\n\nPlease check the image and try again with a valid screenshot.`)
                     .setTimestamp();
                 await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
 
@@ -220,14 +220,19 @@ client.on('messageCreate', async message => {
                     const logEmbed = new EmbedBuilder()
                         .setColor('#FF0000')
                         .setTitle('❌ Reddedilen Abone İşlemi')
-                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n🌍 **Kanal:** \`${isTR ? 'Türkçe' : 'İngilizce'}\`\n🤖 **AI Çıktısı (Kısmi):** \`${lowerText.substring(0, 100)}\``)
+                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n` +
+                                        `🏷️ **İsim:** \`${message.author.tag}\`\n` +
+                                        `🆔 **ID:** \`${message.author.id}\`\n` +
+                                        `📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n` +
+                                        `🌍 **Kayıtlı Dil:** \`${langText}\`\n` +
+                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>\n\n` +
+                                        `🤖 **Yapay Zeka (AI) Çıktısı (Okuyabildiği Kısım):**\n\`\`\`${lowerText.substring(0, 800) || "Yazı okunamadı."}\`\`\``)
                         .setImage(attachment.url)
                         .setTimestamp();
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
 
                 await processingMsg.edit({ content: `❌ **Onaylanmadı!** SS yapay zeka tarafından reddedildi. DM'nizi kontrol edin. <@${message.author.id}>` });
-                
                 setTimeout(() => {
                     processingMsg.delete().catch(() => {});
                     message.delete().catch(() => {}); 
@@ -243,7 +248,7 @@ client.on('messageCreate', async message => {
 });
 
 // ==========================================
-// JOIN & LEAVE (GİRİŞ VE ÇIKIŞ SİSTEMİ)
+// JOIN & LEAVE 
 // ==========================================
 client.on('guildMemberAdd', async member => {
     try {
@@ -262,20 +267,13 @@ client.on('guildMemberAdd', async member => {
         if (channel) {
             const joinedTimestamp = Math.floor(member.joinedTimestamp / 1000);
             const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
-
             const joinEmbed = new EmbedBuilder()
                 .setColor('#00FF00')
                 .setTitle('📥 Sunucuya Yeni Üye Katıldı (Join)')
-                .setDescription(`👤 **Kullanıcı -->** <@${member.id}>\n` +
-                                `🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n` +
-                                `🆔 **Kullanıcı ID -->** \`${member.id}\`\n` +
-                                `📥 **Sunucuya Katılım -->** <t:${joinedTimestamp}:F>\n` +
-                                `📅 **Discord Hesap Açılışı -->** <t:${createdTimestamp}:F>\n` +
-                                `👥 **Toplam Üye Sayısı -->** \`${member.guild.memberCount}\``)
+                .setDescription(`👤 **Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n📥 **Sunucuya Katılım -->** <t:${joinedTimestamp}:F>\n📅 **Discord Hesap Açılışı -->** <t:${createdTimestamp}:F>\n👥 **Toplam Üye Sayısı -->** \`${member.guild.memberCount}\``)
                 .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
                 .setFooter({ text: 'Luas • Giriş Sistemi' })
                 .setTimestamp();
-
             await channel.send({ embeds: [joinEmbed] }).catch(() => {});
         }
     }
@@ -289,14 +287,10 @@ client.on('guildMemberRemove', async member => {
             const leaveEmbed = new EmbedBuilder()
                 .setColor('#FF0000')
                 .setTitle('📤 Sunucudan Üye Ayrıldı (Leave)')
-                .setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n` +
-                                `🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n` +
-                                `🆔 **Kullanıcı ID -->** \`${member.id}\`\n` +
-                                `👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``)
+                .setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``)
                 .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
                 .setFooter({ text: 'Luas • Çıkış Sistemi' })
                 .setTimestamp();
-
             await channel.send({ embeds: [leaveEmbed] }).catch(() => {});
         }
     }
@@ -306,286 +300,116 @@ client.on('guildMemberRemove', async member => {
 // INTERACTION (ETKİLEŞİM) KONTROLÜ
 // ==========================================
 client.on('interactionCreate', async interaction => {
-    // 1. SLASH KOMUTLARI
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
-        try {
-            await command.execute(interaction);
-        } catch (error) {
-            console.error(error);
-            const replyObj = { content: '❌ Komut çalıştırılırken bir hata oluştu!', ephemeral: true };
-            if (interaction.deferred || interaction.replied) await interaction.editReply(replyObj).catch(() => {});
-            else await interaction.reply(replyObj).catch(() => {});
-        }
+        try { await command.execute(interaction); } 
+        catch (error) { console.error(error); }
         return;
     }
 
-    // 2. AÇILIR MENÜ (TICKET)
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'ticket_select') {
             const categoryValue = interaction.values[0]; 
-
-            const modal = new ModalBuilder()
-                .setCustomId(`ticketModal_${categoryValue}`)
-                .setTitle('🎫 Bilet Oluşturma Formu');
-
-            const reasonInput = new TextInputBuilder()
-                .setCustomId('ticketReason')
-                .setLabel('Lütfen sorununuzu detaylı açıklayın')
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Örn: Satın aldığım ürün teslim edilmedi...')
-                .setRequired(true)
-                .setMinLength(10)
-                .setMaxLength(1000);
-
+            const modal = new ModalBuilder().setCustomId(`ticketModal_${categoryValue}`).setTitle('🎫 Bilet Oluşturma Formu');
+            const reasonInput = new TextInputBuilder().setCustomId('ticketReason').setLabel('Lütfen sorununuzu detaylı açıklayın').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(10).setMaxLength(1000);
             modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
             await interaction.showModal(modal);
         }
         return;
     }
 
-    // 3. BUTON ETKİLEŞİMLERİ
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        // --- YETKİLİ BAŞVURU FORMU AÇMA ---
         if (customId === 'open_staff_modal_tr' || customId === 'open_staff_modal_en') {
             const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
-            const modal = new ModalBuilder()
-                .setCustomId(`staffModal_${lang}`)
-                .setTitle(lang === 'TR' ? '🛡️ Yetkili Başvuru Formu' : '🛡️ Staff Application Form');
-
-            const nameAgeInput = new TextInputBuilder()
-                .setCustomId('staffNameAge')
-                .setLabel(lang === 'TR' ? 'İsminiz ve Yaşınız?' : 'Your Name & Age?')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('Örn: Ali, 18')
-                .setRequired(true);
-
-            const commandsInfoInput = new TextInputBuilder()
-                .setCustomId('staffCommands')
-                .setLabel(lang === 'TR' ? 'Komutlar hakkında bilgin var mı?' : 'Do you know about bot commands?')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('Örn: Evet, moderasyon komutlarını biliyorum...')
-                .setRequired(true);
-
-            const discordTimeInput = new TextInputBuilder()
-                .setCustomId('staffDiscordTime')
-                .setLabel(lang === 'TR' ? 'Discordu ne zamandan beri kullanıyorsun?' : 'How long have you been using Discord?')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('Örn: 2021\'den beri...')
-                .setRequired(true);
-
-            const whyUsInput = new TextInputBuilder()
-                .setCustomId('staffWhyUs')
-                .setLabel(lang === 'TR' ? 'Neden biz?' : 'Why us?')
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Örn: Sunucunuzu çok beğeniyorum ve katkı sağlamak istiyorum...')
-                .setRequired(true);
-
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(nameAgeInput),
-                new ActionRowBuilder().addComponents(commandsInfoInput),
-                new ActionRowBuilder().addComponents(discordTimeInput),
-                new ActionRowBuilder().addComponents(whyUsInput)
-            );
-
+            const modal = new ModalBuilder().setCustomId(`staffModal_${lang}`).setTitle(lang === 'TR' ? '🛡️ Yetkili Başvuru Formu' : '🛡️ Staff Application Form');
+            const nameAgeInput = new TextInputBuilder().setCustomId('staffNameAge').setLabel(lang === 'TR' ? 'İsminiz ve Yaşınız?' : 'Your Name & Age?').setStyle(TextInputStyle.Short).setRequired(true);
+            const commandsInfoInput = new TextInputBuilder().setCustomId('staffCommands').setLabel(lang === 'TR' ? 'Komutlar hakkında bilgin var mı?' : 'Do you know about bot commands?').setStyle(TextInputStyle.Short).setRequired(true);
+            const discordTimeInput = new TextInputBuilder().setCustomId('staffDiscordTime').setLabel(lang === 'TR' ? 'Discordu ne zamandan beri kullanıyorsun?' : 'How long have you been using Discord?').setStyle(TextInputStyle.Short).setRequired(true);
+            const whyUsInput = new TextInputBuilder().setCustomId('staffWhyUs').setLabel(lang === 'TR' ? 'Neden biz?' : 'Why us?').setStyle(TextInputStyle.Paragraph).setRequired(true);
+            modal.addComponents(new ActionRowBuilder().addComponents(nameAgeInput), new ActionRowBuilder().addComponents(commandsInfoInput), new ActionRowBuilder().addComponents(discordTimeInput), new ActionRowBuilder().addComponents(whyUsInput));
             await interaction.showModal(modal);
             return;
         }
 
-        // --- SCRIPT ÖNERİ FORMU AÇMA ---
         if (customId === 'open_suggestion_modal_tr' || customId === 'open_suggestion_modal_en') {
             const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
-            const modal = new ModalBuilder()
-                .setCustomId(`suggestionModal_${lang}`)
-                .setTitle(lang === 'TR' ? '💡 Script Öneri Formu' : '💡 Script Suggestion Form');
-
-            const gameInput = new TextInputBuilder()
-                .setCustomId('suggGame')
-                .setLabel(lang === 'TR' ? 'Hangi Oyun?' : 'Which Game?')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('Örn: Roblox, GTA V, Valorant...')
-                .setRequired(true);
-
-            const featuresInput = new TextInputBuilder()
-                .setCustomId('suggFeatures')
-                .setLabel(lang === 'TR' ? 'İstediğiniz Özellikler (Aimbot, ESP...)' : 'Desired Features (Aimbot, ESP...)')
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Örn: Aimbot, ESP Box, Teleport...')
-                .setRequired(true);
-
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(gameInput),
-                new ActionRowBuilder().addComponents(featuresInput)
-            );
-
+            const modal = new ModalBuilder().setCustomId(`suggestionModal_${lang}`).setTitle(lang === 'TR' ? '💡 Script Öneri Formu' : '💡 Script Suggestion Form');
+            const gameInput = new TextInputBuilder().setCustomId('suggGame').setLabel(lang === 'TR' ? 'Hangi Oyun?' : 'Which Game?').setStyle(TextInputStyle.Short).setRequired(true);
+            const featuresInput = new TextInputBuilder().setCustomId('suggFeatures').setLabel(lang === 'TR' ? 'İstediğiniz Özellikler (Aimbot, ESP...)' : 'Desired Features (Aimbot, ESP...)').setStyle(TextInputStyle.Paragraph).setRequired(true);
+            modal.addComponents(new ActionRowBuilder().addComponents(gameInput), new ActionRowBuilder().addComponents(featuresInput));
             await interaction.showModal(modal);
             return;
         }
 
-        // --- YETKİLİ BAŞVURU ONAY / RED ---
-        if (customId.startsWith('approve_staff_') || customId.startsWith('reject_staff_')) {
+        if (customId.startsWith('approve_staff_') || customId.startsWith('reject_staff_') || customId.startsWith('approve_sugg_') || customId.startsWith('reject_sugg_')) {
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
             const hasSupportRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
+            if (!isAdmin && !hasSupportRole) return interaction.reply({ content: '❌ **Bu işlemi yapmak için yetkiniz yok!**', ephemeral: true });
 
-            if (!isAdmin && !hasSupportRole) {
-                return interaction.reply({ content: '❌ **Bu işlemi yapmak için yetkiniz yok!**', ephemeral: true });
-            }
-
-            const isApprove = customId.startsWith('approve_staff_');
+            const isApprove = customId.startsWith('approve_');
             const targetUserId = customId.split('_')[2]; 
 
             const embed = interaction.message.embeds[0];
-            const updatedEmbed = EmbedBuilder.from(embed)
-                .setColor(isApprove ? '#00FF00' : '#FF0000')
-                .addFields({ 
-                    name: isApprove ? '✅ Onaylayan Yetkili' : '❌ Reddeden Yetkili', 
-                    value: `<@${interaction.user.id}>`, 
-                    inline: false 
-                });
-
+            const updatedEmbed = EmbedBuilder.from(embed).setColor(isApprove ? '#00FF00' : '#FF0000').addFields({ name: isApprove ? '✅ Onaylayan Yetkili' : '❌ Reddeden Yetkili', value: `<@${interaction.user.id}>`, inline: false });
             const disabledRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dummy_app').setLabel('Onaylandı').setStyle(ButtonStyle.Success).setDisabled(true),
                 new ButtonBuilder().setCustomId('dummy_rej').setLabel('Reddedildi').setStyle(ButtonStyle.Danger).setDisabled(true)
             );
-
             await interaction.message.edit({ embeds: [updatedEmbed], components: [disabledRow] });
 
             try {
                 const targetUser = await client.users.fetch(targetUserId);
                 if (targetUser) {
-                    const dmEmbed = new EmbedBuilder()
-                        .setColor(isApprove ? '#00FF00' : '#FF0000')
-                        .setTitle(isApprove ? '🎉 Yetkili Başvurunuz Onaylandı!' : '❌ Yetkili Başvurunuz Reddedildi')
-                        .setDescription(isApprove 
-                            ? 'Tebrikler! Yetkili başvuru formunuz ekibimiz tarafından incelenmiş ve **onaylanmıştır**!' 
-                            : 'Maalesef gönderdiğiniz yetkili başvuru formu şu an için uygun görülmemiş ve **reddedilmiştir**.')
-                        .setTimestamp();
+                    const dmEmbed = new EmbedBuilder().setColor(isApprove ? '#00FF00' : '#FF0000').setTitle(isApprove ? '🎉 İşleminiz Onaylandı!' : '❌ İşleminiz Reddedildi').setDescription(isApprove ? 'Gönderdiğiniz form ekibimiz tarafından incelenmiş ve **onaylanmıştır**!' : 'Maalesef gönderdiğiniz form reddedilmiştir.').setTimestamp();
                     await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
                 }
             } catch (e) {}
-
-            await interaction.reply({ content: `✅ **Başvuru başarıyla ${isApprove ? 'onaylandı' : 'reddedildi'} ve kullanıcıya DM gönderildi.**`, ephemeral: true });
+            await interaction.reply({ content: `✅ **İşlem başarıyla ${isApprove ? 'onaylandı' : 'reddedildi'}.**`, ephemeral: true });
             return;
         }
 
-        // --- SCRIPT ÖNERİ ONAY / RED ---
-        if (customId.startsWith('approve_sugg_') || customId.startsWith('reject_sugg_')) {
-            const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-            const hasSupportRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
-
-            if (!isAdmin && !hasSupportRole) {
-                return interaction.reply({ content: '❌ **Bu işlemi yapmak için yetkiniz yok!**', ephemeral: true });
-            }
-
-            const isApprove = customId.startsWith('approve_sugg_');
-            const targetUserId = customId.split('_')[2]; 
-
-            const embed = interaction.message.embeds[0];
-            const updatedEmbed = EmbedBuilder.from(embed)
-                .setColor(isApprove ? '#00FF00' : '#FF0000')
-                .addFields({ 
-                    name: isApprove ? '✅ Onaylayan Yetkili' : '❌ Reddeden Yetkili', 
-                    value: `<@${interaction.user.id}>`, 
-                    inline: false 
+        if (customId === 'claim_ticket' || customId === 'close_ticket' || customId === 'verify_tr' || customId === 'verify_en') {
+            if (customId === 'claim_ticket') {
+                const hasRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
+                const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+                if (!hasRole && !isAdmin) return interaction.reply({ content: '❌ **Bu bileti sahiplenmek için yetkiniz yok!**', ephemeral: true });
+                const embed = interaction.message.embeds[0];
+                const updatedEmbed = EmbedBuilder.from(embed).setColor('#00FF00').addFields({ name: '👤 Bileti Sahiplenen Yetkili', value: `<@${interaction.user.id}>`, inline: false });
+                const components = interaction.message.components[0].components.map(btn => {
+                    if (btn.customId === 'claim_ticket') return ButtonBuilder.from(btn).setDisabled(true).setLabel(`Sahiplenildi: ${interaction.user.username}`);
+                    return ButtonBuilder.from(btn);
                 });
-
-            const disabledRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dummy_app').setLabel('Onaylandı').setStyle(ButtonStyle.Success).setDisabled(true),
-                new ButtonBuilder().setCustomId('dummy_rej').setLabel('Reddedildi').setStyle(ButtonStyle.Danger).setDisabled(true)
-            );
-
-            await interaction.message.edit({ embeds: [updatedEmbed], components: [disabledRow] });
-
-            try {
-                const targetUser = await client.users.fetch(targetUserId);
-                if (targetUser) {
-                    const dmEmbed = new EmbedBuilder()
-                        .setColor(isApprove ? '#00FF00' : '#FF0000')
-                        .setTitle(isApprove ? '🎉 Script Öneriniz Onaylandı!' : '❌ Script Öneriniz Reddedildi')
-                        .setDescription(isApprove 
-                            ? 'Gönderdiğiniz script önerisi yönetim ekibimiz tarafından incelenmiş ve **onaylanmıştır**!' 
-                            : 'Maalesef gönderdiğiniz script önerisi reddedilmiştir.')
-                        .setTimestamp();
-                    await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
-                }
-            } catch (e) {}
-
-            await interaction.reply({ content: `✅ **Öneri başarıyla ${isApprove ? 'onaylandı' : 'reddedildi'}.**`, ephemeral: true });
-            return;
-        }
-
-        // --- BİLET SAHİPLENME (CLAIM) ---
-        if (customId === 'claim_ticket') {
-            const hasRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
-            const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-            
-            if (!hasRole && !isAdmin) {
-                return interaction.reply({ content: '❌ **Bu bileti sahiplenmek için yetkiniz yok!**', ephemeral: true });
-            }
-
-            const embed = interaction.message.embeds[0];
-            const updatedEmbed = EmbedBuilder.from(embed)
-                .setColor('#00FF00') 
-                .addFields({ name: '👤 Bileti Sahiplenen Yetkili', value: `<@${interaction.user.id}>`, inline: false });
-
-            const components = interaction.message.components[0].components.map(btn => {
-                if (btn.customId === 'claim_ticket') {
-                    return ButtonBuilder.from(btn).setDisabled(true).setLabel(`Sahiplenildi: ${interaction.user.username}`);
-                }
-                return ButtonBuilder.from(btn);
-            });
-
-            await interaction.message.edit({ embeds: [updatedEmbed], components: [new ActionRowBuilder().addComponents(components)] });
-            await interaction.reply({ content: `✅ **Bileti başarıyla sahiplendin.**`, ephemeral: true });
-            return;
-        }
-
-        // --- BİLET KAPATMA ---
-        if (customId === 'close_ticket') {
-            await interaction.reply({ content: '🔒 Bilet 5 saniye içinde kapatılıyor...', ephemeral: true });
-            setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
-            return;
-        }
-
-        // --- DOĞRULAMA (KAYIT) SİSTEMİ ---
-        if (customId === 'verify_tr' || customId === 'verify_en') {
-            await interaction.deferReply({ ephemeral: true });
-            const isTR = customId === 'verify_tr';
-            const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
-            const role = interaction.guild.roles.cache.get(roleId);
-
-            if (!role) return interaction.editReply({ content: '❌ **Rol bulunamadı!**' });
-
-            try {
-                await interaction.member.roles.add(role);
-                const msg = isTR ? '✅ **Başarıyla doğrulandınız!**' : '✅ **Successfully verified!**';
-                
-                const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
-                if (logChannelId) {
-                    const logChannel = interaction.client.channels.cache.get(logChannelId);
-                    if (logChannel) {
-                        const verifyLogEmbed = new EmbedBuilder()
-                            .setColor(isTR ? '#E60000' : '#00247D')
-                            .setTitle('✅ Yeni Kullanıcı Kayıt Oldu')
-                            .setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n` +
-                                            `🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n` +
-                                            `🌍 **Seçtiği Dil -->** \`${isTR ? 'Türkçe (TR)' : 'English (EN)'}\`\n` +
-                                            `⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>`)
-                            .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-                            .setTimestamp();
-                        await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
+                await interaction.message.edit({ embeds: [updatedEmbed], components: [new ActionRowBuilder().addComponents(components)] });
+                await interaction.reply({ content: `✅ **Bileti başarıyla sahiplendin.**`, ephemeral: true });
+            } else if (customId === 'close_ticket') {
+                await interaction.reply({ content: '🔒 Bilet 5 saniye içinde kapatılıyor...', ephemeral: true });
+                setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
+            } else if (customId === 'verify_tr' || customId === 'verify_en') {
+                await interaction.deferReply({ ephemeral: true });
+                const isTR = customId === 'verify_tr';
+                const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
+                const role = interaction.guild.roles.cache.get(roleId);
+                if (!role) return interaction.editReply({ content: '❌ **Rol bulunamadı!**' });
+                try {
+                    await interaction.member.roles.add(role);
+                    const msg = isTR ? '✅ **Başarıyla doğrulandınız!**' : '✅ **Successfully verified!**';
+                    const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
+                    if (logChannelId) {
+                        const logChannel = interaction.client.channels.cache.get(logChannelId);
+                        if (logChannel) {
+                            const verifyLogEmbed = new EmbedBuilder().setColor(isTR ? '#E60000' : '#00247D').setTitle('✅ Yeni Kullanıcı Kayıt Oldu').setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n🌍 **Seçtiği Dil -->** \`${isTR ? 'Türkçe (TR)' : 'English (EN)'}\`\n⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setTimestamp();
+                            await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
+                        }
                     }
-                }
-                return interaction.editReply({ content: msg });
-            } catch (error) {
-                return interaction.editReply({ content: '❌ **Botun yetkisi yetersiz!**' });
+                    return interaction.editReply({ content: msg });
+                } catch (error) { return interaction.editReply({ content: '❌ **Botun yetkisi yetersiz!**' }); }
             }
+            return;
         }
 
-        // --- KEY SİSTEMİ ---
         let commandName = '';
         if (customId === 'get_free_key') commandName = 'bedava-key';
         else if (customId === 'get_free_key_en') commandName = 'free-key';
@@ -598,115 +422,49 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 4. MODAL SUBMIT (FORM GÖNDERİMLERİ)
     if (interaction.isModalSubmit()) {
-        
-        // --- YETKİLİ BAŞVURU FORMU GÖNDERİMİ ---
-        if (interaction.customId.startsWith('staffModal_')) {
+        if (interaction.customId.startsWith('staffModal_') || interaction.customId.startsWith('suggestionModal_')) {
             await interaction.deferReply({ ephemeral: true });
-
             const lang = interaction.customId.split('_')[1]; 
-            const nameAge = interaction.fields.getTextInputValue('staffNameAge');
-            const commands = interaction.fields.getTextInputValue('staffCommands');
-            const discordTime = interaction.fields.getTextInputValue('staffDiscordTime');
-            const whyUs = interaction.fields.getTextInputValue('staffWhyUs');
-
-            const targetChannelId = lang === 'TR' ? ayarlar.TR_BASVURU_KANAL_ID : ayarlar.EN_BASVURU_KANAL_ID;
+            const isStaff = interaction.customId.startsWith('staffModal_');
+            const targetChannelId = lang === 'TR' ? (isStaff ? ayarlar.TR_BASVURU_KANAL_ID : ayarlar.TR_ONERI_KANAL_ID) : (isStaff ? ayarlar.EN_BASVURU_KANAL_ID : ayarlar.EN_ONERI_KANAL_ID);
 
             if (targetChannelId) {
                 const logChannel = interaction.client.channels.cache.get(targetChannelId);
                 if (logChannel) {
                     const joinedTimestamp = Math.floor(interaction.member.joinedTimestamp / 1000);
+                    const embed = new EmbedBuilder().setColor(isStaff ? '#9400D3' : (lang === 'TR' ? '#E60000' : '#00247D')).setTitle(lang === 'TR' ? (isStaff ? '🛡️ Yeni Yetkili Başvurusu' : '💡 Yeni Script Önerisi') : (isStaff ? '🛡️ New Staff Application' : '💡 New Script Suggestion')).setDescription(`👤 **Gönderen Kullanıcı -->** <@${interaction.user.id}>\n🆔 **Discord ID -->** \`${interaction.user.id}\`\n📥 **Sunucuya Katılım Tarihi -->** <t:${joinedTimestamp}:F>\n🌍 **Dil -->** \`${lang}\`\n\n`);
 
-                    const staffEmbed = new EmbedBuilder()
-                        .setColor('#9400D3')
-                        .setTitle(lang === 'TR' ? '🛡️ Yeni Yetkili Başvurusu' : '🛡️ New Staff Application')
-                        .setDescription(`👤 **Başvuran Kullanıcı -->** <@${interaction.user.id}>\n` +
-                                        `🆔 **Discord ID -->** \`${interaction.user.id}\`\n` +
-                                        `📥 **Sunucuya Katılım Tarihi -->** <t:${joinedTimestamp}:F>\n` +
-                                        `🌍 **Dil -->** \`${lang}\`\n\n` +
-                                        `📝 **İsim ve Yaş:**\n\`\`\`${nameAge}\`\`\`\n` +
-                                        `🛠️ **Komutlar Hakkında Bilgi:**\n\`\`\`${commands}\`\`\`\n` +
-                                        `⏰ **Discord'u Ne Zamandan Beri Kullanıyor:**\n\`\`\`${discordTime}\`\`\`\n` +
-                                        `⭐ **Neden Biz?:**\n\`\`\`${whyUs}\`\`\`\n\n` +
-                                        `❗️ \`İşlem:\` **Aşağıdaki butonları kullanarak başvuruyu onaylayabilir veya reddedebilirsiniz.**`)
-                        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-                        .setFooter({ text: 'Luas • Yetkili Başvuru Sistemi' })
-                        .setTimestamp();
+                    if (isStaff) {
+                        embed.setDescription(embed.data.description + `📝 **İsim ve Yaş:**\n\`\`\`${interaction.fields.getTextInputValue('staffNameAge')}\`\`\`\n🛠️ **Komutlar:**\n\`\`\`${interaction.fields.getTextInputValue('staffCommands')}\`\`\`\n⏰ **Discord Süresi:**\n\`\`\`${interaction.fields.getTextInputValue('staffDiscordTime')}\`\`\`\n⭐ **Neden Biz?:**\n\`\`\`${interaction.fields.getTextInputValue('staffWhyUs')}\`\`\`\n\n❗️ \`İşlem:\` **Aşağıdan onaylayın veya reddedin.**`);
+                    } else {
+                        embed.setDescription(embed.data.description + `🎮 **İstenen Oyun:**\n\`\`\`${interaction.fields.getTextInputValue('suggGame')}\`\`\`\n⚡ **İstenen Özellikler:**\n\`\`\`${interaction.fields.getTextInputValue('suggFeatures')}\`\`\`\n\n❗️ \`İşlem:\` **Aşağıdan onaylayın veya reddedin.**`);
+                    }
+                    embed.setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setTimestamp();
 
                     const actionRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`approve_staff_${interaction.user.id}`).setLabel('✅ Onayla').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId(`reject_staff_${interaction.user.id}`).setLabel('❌ Reddet').setStyle(ButtonStyle.Danger)
+                        new ButtonBuilder().setCustomId(`approve_${isStaff ? 'staff' : 'sugg'}_${interaction.user.id}`).setLabel('✅ Onayla').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`reject_${isStaff ? 'staff' : 'sugg'}_${interaction.user.id}`).setLabel('❌ Reddet').setStyle(ButtonStyle.Danger)
                     );
-
-                    await logChannel.send({ embeds: [staffEmbed], components: [actionRow] }).catch(() => {});
+                    await logChannel.send({ embeds: [embed], components: [actionRow] }).catch(() => {});
                 }
             }
-
-            await interaction.editReply({ content: lang === 'TR' ? '✅ **Başvurunuz iletildi!**' : '✅ **Application sent!**' });
+            await interaction.editReply({ content: '✅ **Form başarıyla iletildi!**' });
             return;
         }
 
-        // --- SCRIPT ÖNERİ FORMU GÖNDERİMİ ---
-        if (interaction.customId.startsWith('suggestionModal_')) {
-            await interaction.deferReply({ ephemeral: true });
-
-            const lang = interaction.customId.split('_')[1]; 
-            const game = interaction.fields.getTextInputValue('suggGame');
-            const features = interaction.fields.getTextInputValue('suggFeatures');
-
-            const targetChannelId = lang === 'TR' ? ayarlar.TR_ONERI_KANAL_ID : ayarlar.EN_ONERI_KANAL_ID;
-
-            if (targetChannelId) {
-                const logChannel = interaction.client.channels.cache.get(targetChannelId);
-                if (logChannel) {
-                    const joinedTimestamp = Math.floor(interaction.member.joinedTimestamp / 1000);
-
-                    const suggestionEmbed = new EmbedBuilder()
-                        .setColor(lang === 'TR' ? '#E60000' : '#00247D')
-                        .setTitle(lang === 'TR' ? '💡 Yeni Türkçe Script Önerisi' : '💡 New English Script Suggestion')
-                        .setDescription(`👤 **Öneren Kullanıcı -->** <@${interaction.user.id}>\n` +
-                                        `🆔 **Discord ID -->** \`${interaction.user.id}\`\n` +
-                                        `📥 **Sunucuya Katılım Tarihi -->** <t:${joinedTimestamp}:F>\n` +
-                                        `🌍 **Dil -->** \`${lang}\`\n\n` +
-                                        `🎮 **Oynanan / İstenen Oyun:**\n\`\`\`${game}\`\`\`\n` +
-                                        `⚡ **İstenen Özellikler:**\n\`\`\`${features}\`\`\`\n\n` +
-                                        `❗️ \`İşlem:\` **Aşağıdaki butonları kullanarak öneriyi onaylayabilir veya reddedebilirsiniz.**`)
-                        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-                        .setFooter({ text: 'Luas • Öneri Sistemi' })
-                        .setTimestamp();
-
-                    const actionRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`approve_sugg_${interaction.user.id}`).setLabel('✅ Onayla').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId(`reject_sugg_${interaction.user.id}`).setLabel('❌ Reddet').setStyle(ButtonStyle.Danger)
-                    );
-
-                    await logChannel.send({ embeds: [suggestionEmbed], components: [actionRow] }).catch(() => {});
-                }
-            }
-
-            await interaction.editReply({ content: lang === 'TR' ? '✅ **Öneriniz iletildi!**' : '✅ **Suggestion sent!**' });
-            return;
-        }
-
-        // --- BİLET OLUŞTURMA FORMU ---
         if (interaction.customId.startsWith('ticketModal_')) {
             await interaction.deferReply({ ephemeral: true });
             const categoryValue = interaction.customId.replace('ticketModal_', ''); 
             const reason = interaction.fields.getTextInputValue('ticketReason'); 
-            
-            let prefix = "destek";
-            let baslik = "🛠️ Destek Bileti";
+            let prefix = "destek"; let baslik = "🛠️ Destek Bileti";
             if (categoryValue === "satin_alim") { prefix = "satınalım"; baslik = "🛒 Satın Alım Bileti"; }
             else if (categoryValue === "is_birligi") { prefix = "işbirliği"; baslik = "🤝 İş Birliği Bileti"; }
 
             try {
                 let counter = await TicketModel.findOne({ id: "ticket" });
                 if (!counter) counter = new TicketModel({ id: "ticket", count: 0 });
-                
-                counter.count += 1;
-                await counter.save();
-
+                counter.count += 1; await counter.save();
                 const ticketNo = counter.count.toString().padStart(3, '0'); 
                 const channelName = `${prefix}-${interaction.user.username}-${ticketNo}`;
 
@@ -715,40 +473,18 @@ client.on('interactionCreate', async interaction => {
                     { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }, 
                     { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] } 
                 ];
+                if (ayarlar.DESTEK_EKIBI_ROL_ID && ayarlar.DESTEK_EKIBI_ROL_ID.length > 5) permissionOverwrites.push({ id: ayarlar.DESTEK_EKIBI_ROL_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
 
-                if (ayarlar.DESTEK_EKIBI_ROL_ID && ayarlar.DESTEK_EKIBI_ROL_ID.length > 5) {
-                    permissionOverwrites.push({ id: ayarlar.DESTEK_EKIBI_ROL_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
-                }
-
-                const ticketChannel = await interaction.guild.channels.create({
-                    name: channelName,
-                    type: ChannelType.GuildText,
-                    parent: ayarlar.TICKET_KATEGORI_ID && ayarlar.TICKET_KATEGORI_ID.length > 5 ? ayarlar.TICKET_KATEGORI_ID : null,
-                    permissionOverwrites: permissionOverwrites
-                });
-
-                const ticketEmbed = new EmbedBuilder()
-                    .setColor('#0099FF')
-                    .setTitle(baslik)
-                    .setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir.\n\n📝 **Kullanıcının Belirttiği Sorun:**\n\`\`\`${reason}\`\`\`\n\n\`Bilet Numarası:\` **#${ticketNo}**`)
-                    .setImage('https://i.ibb.co/Q4hNKq4/Luas-Ticket.png') 
-                    .setFooter({ text: 'Luas • Destek Sistemi' })
-                    .setTimestamp();
-
-                const ticketButtons = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('claim_ticket').setLabel('✋ Sahiplen').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Bileti Kapat').setStyle(ButtonStyle.Danger)
-                );
+                const ticketChannel = await interaction.guild.channels.create({ name: channelName, type: ChannelType.GuildText, parent: ayarlar.TICKET_KATEGORI_ID && ayarlar.TICKET_KATEGORI_ID.length > 5 ? ayarlar.TICKET_KATEGORI_ID : null, permissionOverwrites: permissionOverwrites });
+                const ticketEmbed = new EmbedBuilder().setColor('#0099FF').setTitle(baslik).setDescription(`Merhaba <@${interaction.user.id}>,\n\nDestek ekibimiz en kısa sürede seninle ilgilenecektir.\n\n📝 **Sorun:**\n\`\`\`${reason}\`\`\`\n\n\`Bilet Numarası:\` **#${ticketNo}**`).setImage('https://i.ibb.co/Q4hNKq4/Luas-Ticket.png').setFooter({ text: 'Luas • Destek Sistemi' }).setTimestamp();
+                const ticketButtons = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('claim_ticket').setLabel('✋ Sahiplen').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Bileti Kapat').setStyle(ButtonStyle.Danger));
 
                 await ticketChannel.send({ content: `<@${interaction.user.id}> | <@&${ayarlar.DESTEK_EKIBI_ROL_ID}>`, embeds: [ticketEmbed], components: [ticketButtons] });
-                await interaction.editReply({ content: `✅ **Biletiniz başarıyla oluşturuldu: ${ticketChannel}**` });
-            } catch (err) {
-                await interaction.editReply({ content: '❌ Bilet oluşturulurken hata oluştu.' });
-            }
+                await interaction.editReply({ content: `✅ **Biletiniz oluşturuldu: ${ticketChannel}**` });
+            } catch (err) { await interaction.editReply({ content: '❌ Bilet oluşturulurken hata oluştu.' }); }
             return;
         }
 
-        // --- ÖZEL KEY OLUŞTURMA ---
         if (interaction.customId === 'customKeyModal') {
             await interaction.deferReply({ ephemeral: true });
             const username = interaction.fields.getTextInputValue('usernameInput');
@@ -758,26 +494,17 @@ client.on('interactionCreate', async interaction => {
             try {
                 const existing = await UserModel.findOne({ username, password });
                 if (existing) return interaction.editReply({ content: '⚠️ **Bu kullanıcı adı ve key zaten kayıtlı!**' });
-
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
                 const newUser = new UserModel({ username, password, keyId: uniqueKeyId, plan: "premium", duration, discordId: interaction.user.id, creatorTag: interaction.user.tag });
                 await newUser.save();
-
-                const replyEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setTitle('💎 Özel Key Oluşturuldu')
-                    .setDescription(`🚀 **Key:** \`${password}\`\n🆔 **ID:** \`${uniqueKeyId}\`\n👑 **Sahip:** \`${username}\``);
-
+                const replyEmbed = new EmbedBuilder().setColor('#FFD700').setTitle('💎 Özel Key Oluşturuldu').setDescription(`🚀 **Key:** \`${password}\`\n🆔 **ID:** \`${uniqueKeyId}\`\n👑 **Sahip:** \`${username}\``);
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
                     if (logChannel) await logChannel.send({ embeds: [replyEmbed] }).catch(() => {});
                 }
-
                 await interaction.editReply({ embeds: [replyEmbed] });
-            } catch (err) {
-                await interaction.editReply({ content: '❌ **Veritabanı hatası!**' });
-            }
+            } catch (err) { await interaction.editReply({ content: '❌ **Veritabanı hatası!**' }); }
         }
     }
 });
