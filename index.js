@@ -31,7 +31,6 @@ const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 const ConfigSchema = new mongoose.Schema({ id: { type: String, default: "config" }, tr_ss_channel: { type: String, default: null }, en_ss_channel: { type: String, default: null } });
 const ConfigModel = mongoose.model('Config', ConfigSchema);
 
-// YENİ: SAYI SAYMA SİSTEMİ VERİTABANI
 const CountingSchema = new mongoose.Schema({ guildId: String, channelId: String, language: String, currentCount: { type: Number, default: 0 }, lastUserId: { type: String, default: null } });
 const CountingModel = mongoose.model('Counting', CountingSchema);
 
@@ -183,21 +182,17 @@ client.on('messageCreate', async message => {
         const isTR = countingData.language === 'tr';
         const number = parseInt(message.content);
 
-        // Sayı dışında bir şey yazıldıysa (Örn: harf)
         if (isNaN(number)) {
             await message.react('❌');
-            await message.member.timeout(5 * 1000, 'Sayı sayma kanalında metin kullandı.').catch(() => {}); // 5 Saniye Mute
+            await message.member.timeout(5 * 1000, 'Sayı sayma kanalında metin kullandı.').catch(() => {}); 
             const errMsg = isTR 
                 ? `❌ <@${message.author.id}>, bu kanalda sadece sayı yazabilirsin! (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
                 : `❌ <@${message.author.id}>, you can only type numbers here! (Muted for 5s)\nCounting restarts at **1**.`;
             await message.channel.send({ content: errMsg });
-            countingData.currentCount = 0;
-            countingData.lastUserId = null;
-            await countingData.save();
+            countingData.currentCount = 0; countingData.lastUserId = null; await countingData.save();
             return;
         }
 
-        // Art arda aynı kişi yazdıysa
         if (countingData.lastUserId === message.author.id) {
             await message.react('❌');
             await message.member.timeout(5 * 1000, 'Art arda sayı saydı.').catch(() => {});
@@ -205,42 +200,37 @@ client.on('messageCreate', async message => {
                 ? `❌ <@${message.author.id}>, art arda iki sayı yazamazsın! (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
                 : `❌ <@${message.author.id}>, you can't count twice in a row! (Muted for 5s)\nCounting restarts at **1**.`;
             await message.channel.send({ content: errMsg });
-            countingData.currentCount = 0;
-            countingData.lastUserId = null;
-            await countingData.save();
+            countingData.currentCount = 0; countingData.lastUserId = null; await countingData.save();
             return;
         }
 
         const expectedNumber = countingData.currentCount + 1;
 
-        // Doğru Sayıysa
         if (number === expectedNumber) {
             await message.react('✅');
-            countingData.currentCount = expectedNumber;
-            countingData.lastUserId = message.author.id;
-            await countingData.save();
-        } 
-        // Yanlış Sayıysa
-        else {
+            countingData.currentCount = expectedNumber; countingData.lastUserId = message.author.id; await countingData.save();
+        } else {
             await message.react('❌');
             await message.member.timeout(5 * 1000, 'Yanlış sayı saydı.').catch(() => {});
             const errMsg = isTR 
                 ? `❌ <@${message.author.id}> yanlış sayıyı yazdı! Beklenen sayı **${expectedNumber}** idi. (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
                 : `❌ <@${message.author.id}> typed the wrong number! Expected **${expectedNumber}**. (Muted for 5s)\nCounting restarts at **1**.`;
             await message.channel.send({ content: errMsg });
-            countingData.currentCount = 0;
-            countingData.lastUserId = null;
-            await countingData.save();
+            countingData.currentCount = 0; countingData.lastUserId = null; await countingData.save();
         }
-        return; // Sayı sayma kanalıysa aşağıdaki SS sistemine girmemesi için işlemi durdurur.
+        return; 
     }
 
     // --- 2. ABONE SS KONTROLÜ (YAPAY ZEKA) ---
     const config = await ConfigModel.findOne({ id: "config" });
     if (!config) return;
 
-    if (message.channel.id === config.tr_ss_channel || message.channel.id === config.en_ss_channel) {
-        const isTR = message.channel.id === config.tr_ss_channel;
+    // Özel ID'leri buraya tanımladık
+    const tr_kanal = "1530995336229945426";
+    const en_kanal = "1530996048254734499";
+
+    if (message.channel.id === tr_kanal || message.channel.id === en_kanal) {
+        const isTR = message.channel.id === tr_kanal;
 
         if (message.attachments.size === 0) {
             await message.delete().catch(() => {});
@@ -283,9 +273,16 @@ client.on('messageCreate', async message => {
             const langText = isTurkishUser ? 'Türkçe (TR)' : 'English (EN)';
 
             if (hasName && hasSub) {
+                // ROLÜ VER
                 const roleId = isTR ? ayarlar.ABONE_ROL_ID : ayarlar.SUBSCRIBER_ROL_ID;
                 const role = message.guild.roles.cache.get(roleId);
                 if (role) await message.member.roles.add(role).catch(() => {});
+
+                // ===============================================
+                // MÜKEMMEL DOKUNUŞ: KANALI KULLANICIYA GİZLEME!
+                // Onaylanan kullanıcının bu kanalı görme izni siliniyor.
+                // ===============================================
+                await message.channel.permissionOverwrites.delete(message.author.id).catch(() => {});
 
                 const dmEmbed = new EmbedBuilder().setColor('#00FF00').setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!').setDescription(isTR ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.` : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.`).setTimestamp();
                 await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
@@ -366,24 +363,69 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
-        
-        // Komutlara CountingModel'i aktarıyoruz
         try { await command.execute(interaction, UserModel, TicketModel, ConfigModel, CountingModel); } 
         catch (error) { console.error(error); }
         return;
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
-        const categoryValue = interaction.values[0]; 
-        const modal = new ModalBuilder().setCustomId(`ticketModal_${categoryValue}`).setTitle('🎫 Bilet Oluşturma Formu');
-        const reasonInput = new TextInputBuilder().setCustomId('ticketReason').setLabel('Lütfen sorununuzu detaylı açıklayın').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(10).setMaxLength(1000);
-        modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-        await interaction.showModal(modal);
+    if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'ticket_select') {
+            const categoryValue = interaction.values[0]; 
+            const modal = new ModalBuilder().setCustomId(`ticketModal_${categoryValue}`).setTitle('🎫 Bilet Oluşturma Formu');
+            const reasonInput = new TextInputBuilder().setCustomId('ticketReason').setLabel('Lütfen sorununuzu detaylı açıklayın').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(10).setMaxLength(1000);
+            modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+            await interaction.showModal(modal);
+        }
         return;
     }
 
     if (interaction.isButton()) {
         const { customId } = interaction;
+
+        // ========================================================
+        // DİKKAT! KANALI SADECE SEÇENLERE ÖZEL OLARAK AÇAN SİHİRLİ KISIM
+        // ========================================================
+        if (customId === 'verify_tr' || customId === 'verify_en') {
+            await interaction.deferReply({ ephemeral: true });
+            
+            const isTR = customId === 'verify_tr';
+            const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
+            const role = interaction.guild.roles.cache.get(roleId);
+            
+            // Sen bana bu ID'leri verdin:
+            const targetChannelId = isTR ? "1530995336229945426" : "1530996048254734499";
+            const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
+
+            if (!role) return interaction.editReply({ content: '❌ **Rol bulunamadı! Lütfen yetkiliye bildirin.**' });
+
+            try {
+                // 1. DİL ROLÜNÜ VERİYORUZ
+                await interaction.member.roles.add(role);
+                
+                // 2. ADAMA ÖZEL OLARAK O KANALI GÖRME İZNİ VERİYORUZ!
+                if (targetChannel) {
+                    await targetChannel.permissionOverwrites.create(interaction.user.id, {
+                        ViewChannel: true,
+                        SendMessages: true,
+                        ReadMessageHistory: true
+                    }).catch(() => {});
+                }
+
+                const msg = isTR ? '✅ **Kayıt tamamlandı, onaylanmak için açılan yeni kanala gidip YouTube abone SS\'inizi atın!**' : '✅ **Successfully verified! Please go to the newly opened channel and upload your YouTube subscription screenshot!**';
+                
+                // Kayıt Logu
+                const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
+                if (logChannelId) {
+                    const logChannel = interaction.client.channels.cache.get(logChannelId);
+                    if (logChannel) {
+                        const verifyLogEmbed = new EmbedBuilder().setColor(isTR ? '#E60000' : '#00247D').setTitle('✅ Yeni Kullanıcı Kayıt Oldu').setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n🌍 **Seçtiği Dil -->** \`${isTR ? 'Türkçe (TR)' : 'English (EN)'}\`\n⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setTimestamp();
+                        await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
+                    }
+                }
+                return interaction.editReply({ content: msg });
+
+            } catch (error) { return interaction.editReply({ content: '❌ **Botun yetkisi yetersiz!**' }); }
+        }
 
         if (customId === 'open_staff_modal_tr' || customId === 'open_staff_modal_en') {
             const lang = customId.endsWith('_tr') ? 'TR' : 'EN';
@@ -434,7 +476,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        if (customId === 'claim_ticket' || customId === 'close_ticket' || customId === 'verify_tr' || customId === 'verify_en') {
+        if (customId === 'claim_ticket' || customId === 'close_ticket') {
             if (customId === 'claim_ticket') {
                 const hasRole = interaction.member.roles.cache.has(ayarlar.DESTEK_EKIBI_ROL_ID);
                 const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
@@ -450,25 +492,6 @@ client.on('interactionCreate', async interaction => {
             } else if (customId === 'close_ticket') {
                 await interaction.reply({ content: '🔒 Bilet 5 saniye içinde kapatılıyor...', ephemeral: true });
                 setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
-            } else if (customId === 'verify_tr' || customId === 'verify_en') {
-                await interaction.deferReply({ ephemeral: true });
-                const isTR = customId === 'verify_tr';
-                const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
-                const role = interaction.guild.roles.cache.get(roleId);
-                if (!role) return interaction.editReply({ content: '❌ **Rol bulunamadı!**' });
-                try {
-                    await interaction.member.roles.add(role);
-                    const msg = isTR ? '✅ **Başarıyla doğrulandınız!**' : '✅ **Successfully verified!**';
-                    const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
-                    if (logChannelId) {
-                        const logChannel = interaction.client.channels.cache.get(logChannelId);
-                        if (logChannel) {
-                            const verifyLogEmbed = new EmbedBuilder().setColor(isTR ? '#E60000' : '#00247D').setTitle('✅ Yeni Kullanıcı Kayıt Oldu').setDescription(`👤 **Kullanıcı -->** <@${interaction.user.id}>\n🆔 **Kullanıcı ID -->** \`${interaction.user.id}\`\n🌍 **Seçtiği Dil -->** \`${isTR ? 'Türkçe (TR)' : 'English (EN)'}\`\n⏰ **Kayıt Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setTimestamp();
-                            await logChannel.send({ embeds: [verifyLogEmbed] }).catch(() => {});
-                        }
-                    }
-                    return interaction.editReply({ content: msg });
-                } catch (error) { return interaction.editReply({ content: '❌ **Botun yetkisi yetersiz!**' }); }
             }
             return;
         }
