@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
+const { joinVoiceChannel } = require('@discordjs/voice'); // YENİ: SES MODÜLÜ
 
 const ayarlar = require('./roller.js');
 
@@ -86,6 +87,7 @@ const client = new Client({
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates, // YENİ: Ses kanalına girebilmesi için izin
         GatewayIntentBits.GuildMembers 
     ]
 });
@@ -106,6 +108,22 @@ for (const file of commandFiles) {
 
 client.once('ready', async () => {
     console.log(`🤖 Discord botu aktif edildi! Giriş: ${client.user.tag}`);
+
+    // --- 7/24 SESE BAĞLANMA İŞLEMİ ---
+    const voiceChannelId = ayarlar.SES_KANAL_ID;
+    if (voiceChannelId) {
+        const channel = client.channels.cache.get(voiceChannelId);
+        if (channel && channel.isVoiceBased()) {
+            joinVoiceChannel({
+                channelId: channel.id,
+                guildId: channel.guild.id,
+                adapterCreator: channel.guild.voiceAdapterCreator,
+            });
+            console.log(`🔊 7/24 Ses kanalına bağlanıldı: ${channel.name}`);
+        } else {
+            console.log(`⚠️ Ses kanalı bulunamadı veya ID hatalı!`);
+        }
+    }
 
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
@@ -130,7 +148,6 @@ client.on('messageCreate', async message => {
     if (message.channel.id === config.tr_ss_channel || message.channel.id === config.en_ss_channel) {
         const isTR = message.channel.id === config.tr_ss_channel;
 
-        // 1. Resim yoksa uyarıp sil (Dile göre ayarlı)
         if (message.attachments.size === 0) {
             await message.delete().catch(() => {});
             const warnContent = isTR 
@@ -142,7 +159,6 @@ client.on('messageCreate', async message => {
         }
 
         const attachment = message.attachments.first();
-        // 2. Eklenen dosya resim değilse veya GIF ise (Dile göre ayarlı)
         if (!attachment.contentType || !attachment.contentType.startsWith('image/') || attachment.contentType === 'image/gif') {
             await message.delete().catch(() => {});
             const warnContent = isTR
@@ -163,10 +179,7 @@ client.on('messageCreate', async message => {
         try {
             const { data: { text } } = await Tesseract.recognize(attachment.url, isTR ? 'tur' : 'eng');
             
-            // YENİ VE DAHA GÜÇLÜ ALGORİTMA: Bütün boşlukları ve gereksiz sembolleri siliyoruz! 
-            // Bu sayede siyah temalı zor okunan PC ekranlarını (L u a S vb.) bile hatasız anlar.
             const cleanText = text.toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, ''); 
-            
             const hasName = cleanText.includes('luas');
             const hasSub = cleanText.includes('abone') || cleanText.includes('sub');
 
@@ -176,12 +189,10 @@ client.on('messageCreate', async message => {
             const langText = isTurkishUser ? 'Türkçe (TR)' : 'English (EN)';
 
             if (hasName && hasSub) {
-                // BAŞARILI DURUM
                 const roleId = isTR ? ayarlar.ABONE_ROL_ID : ayarlar.SUBSCRIBER_ROL_ID;
                 const role = message.guild.roles.cache.get(roleId);
                 if (role) await message.member.roles.add(role).catch(() => {});
 
-                // Sade DM
                 const dmEmbed = new EmbedBuilder()
                     .setColor('#00FF00')
                     .setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!')
@@ -191,7 +202,6 @@ client.on('messageCreate', async message => {
                     .setTimestamp();
                 await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
 
-                // Detaylı Log (AI Çıktısı Kaldırıldı)
                 if (logChannel) {
                     const logEmbed = new EmbedBuilder()
                         .setColor('#00FF00')
@@ -218,7 +228,6 @@ client.on('messageCreate', async message => {
                 }, 5000);
 
             } else {
-                // BAŞARISIZ DURUM
                 const dmEmbed = new EmbedBuilder()
                     .setColor('#FF0000')
                     .setTitle(isTR ? '❌ Aboneliğiniz Onaylanmadı' : '❌ Subscription Failed')
@@ -275,7 +284,6 @@ client.on('guildMemberAdd', async member => {
             .setTitle(`🎉 Luas'a Hoş Geldiniz!`)
             .setDescription(`Merhaba **${member.user.username}**,\n\n**Luas** sunucumuza hoş geldin! Script hakkında daha fazla bilgi almak ve ayrıcalıklardan yararlanmak için sunucumuza göz atabilirsin. İyi eğlenceler!`)
             .setTimestamp();
-        
         await member.send({ embeds: [dmEmbed] }).catch(() => {});
     } catch (err) {}
 
