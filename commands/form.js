@@ -6,13 +6,13 @@ module.exports = {
         .setDescription('Script tanıtım formu oluşturur (Türkçe).')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addStringOption(option => option.setName('isim').setDescription('Scriptin adını yazın.').setRequired(true))
-        .addStringOption(option => option.setName('foto_linki').setDescription('Scriptin fotoğraf URL\'sini (Linkini) yapıştırın.').setRequired(true))
-        .addStringOption(option => option.setName('ozellikler').setDescription('Özellikleri aralarına VİRGÜL (,) koyarak yazın.').setRequired(true))
+        .addAttachmentOption(option => option.setName('foto').setDescription('Scriptin fotoğrafını bilgisayardan/galeriden seçin.').setRequired(true))
+        .addStringOption(option => option.setName('ozellikler').setDescription('Özellikleri VİRGÜL (,) ile ayırarak yazın (Örn: Aimbot, ESP, Skeleton).').setRequired(true))
         .addStringOption(option => option.setName('loadstring').setDescription('Scriptin kodunu (Loadstring) buraya yapıştırın.').setRequired(true)),
 
     async execute(interaction) {
         const isim = interaction.options.getString('isim');
-        const foto = interaction.options.getString('foto_linki');
+        const foto = interaction.options.getAttachment('foto'); // Dosyadan seçilen fotoğrafı yakaladık
         const ozelliklerRaw = interaction.options.getString('ozellikler');
         const loadstring = interaction.options.getString('loadstring');
 
@@ -23,23 +23,24 @@ module.exports = {
         const solSutun = [];
         const sagSutun = [];
         for (let i = 0; i < ozelliklerDizi.length; i++) {
-            if (i % 2 === 0) solSutun.push(`✦ ${ozelliklerDizi[i]}`);
-            else sagSutun.push(`✦ ${ozelliklerDizi[i]}`);
+            // Şık görünmesi için alıntı ve kalın punto ekledik
+            if (i % 2 === 0) solSutun.push(`> ✦ **${ozelliklerDizi[i]}**`);
+            else sagSutun.push(`> ✦ **${ozelliklerDizi[i]}**`);
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#0099FF')
-            .setTitle(`🚀 ${isim} - Script Özellikleri`)
-            .setImage(foto)
+            .setColor('#2b2d31') // Discord'un karanlık temasına çok iyi giden premium füme renk
+            .setTitle(`🚀 ${isim}`)
+            .setImage(foto.url) // Yüklenen fotoğrafın URL'sini embed'e basıyoruz
             .setFooter({ text: 'Luas • Script Tanıtım Sistemi', iconURL: interaction.guild.iconURL() })
             .setTimestamp();
 
-        // Yan yana sütunları embed'e ekleme
-        if (solSutun.length > 0) embed.addFields({ name: '✨ Özellikler', value: solSutun.join('\n'), inline: true });
-        if (sagSutun.length > 0) embed.addFields({ name: '⚡ Ekstra Özellikler', value: sagSutun.join('\n'), inline: true });
+        // Yan yana sütunları embed'e ekleme (\u200B görünmez karakterdir, iki sütunun birleşik durmasını sağlar)
+        if (solSutun.length > 0) embed.addFields({ name: '✨ ÖZELLİKLER', value: solSutun.join('\n\n'), inline: true });
+        if (sagSutun.length > 0) embed.addFields({ name: '\u200B', value: sagSutun.join('\n\n'), inline: true });
 
-        // Loadstring Bloğunu ekleme (Kopyalaması kolay olsun diye Lua formatında)
-        embed.addFields({ name: '📜 Script Kodları (Loadstring)', value: `\`\`\`lua\n${loadstring}\n\`\`\``, inline: false });
+        // Loadstring Bloğunu ekleme
+        embed.addFields({ name: '📜 SCRIPT KODU (Loadstring)', value: `\`\`\`lua\n${loadstring}\n\`\`\``, inline: false });
 
         await interaction.reply({ embeds: [embed] });
     }
