@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const ayarlar = require('../roller.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -17,10 +18,31 @@ module.exports = {
 
         await target.kick(reason);
         
+        // Kanala giden sade mesaj
         const embed = new EmbedBuilder()
-            .setColor('#FF8C00')
-            .setDescription(`👢 <@${target.user.id}> (\`${target.user.tag}\`) **sunucudan atıldı!**\n\n📝 **Sebep:** \`${reason}\``);
-            
+            .setColor('#2B2D31')
+            .setDescription(`👢 <@${target.user.id}> **sunucudan atıldı!**\n\n📝 **Sebep:** \`${reason}\``);
         await interaction.reply({ embeds: [embed] });
+
+        // Log Kanalı
+        const logChannelId = ayarlar.KICK_LOG_KANAL_ID;
+        if (logChannelId) {
+            const logChannel = interaction.guild.channels.cache.get(logChannelId);
+            if (logChannel) {
+                const logEmbed = new EmbedBuilder()
+                    .setColor('#FF8C00')
+                    .setTitle('👢 Kullanıcı Atıldı (Kick)')
+                    .setDescription(`👮 **İşlemi Yapan Yetkili -->** <@${interaction.user.id}>\n` +
+                                    `🆔 **Yetkili ID -->** \`${interaction.user.id}\`\n\n` +
+                                    `👤 **Atılan Kullanıcı -->** <@${target.user.id}>\n` +
+                                    `🆔 **Kullanıcı ID -->** \`${target.user.id}\`\n\n` +
+                                    `📝 **Atılma Sebebi -->** \`${reason}\`\n` +
+                                    `⏰ **İşlem Tarihi -->** <t:${Math.floor(Date.now() / 1000)}:F>`)
+                    .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
+                    .setFooter({ text: 'Luas • Moderasyon Sistemi' })
+                    .setTimestamp();
+                await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+            }
+        }
     }
 };
