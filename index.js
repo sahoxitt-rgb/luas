@@ -170,7 +170,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// SAYI SAYMA & ABONE SS MERKEZİ (messageCreate)
+// SAYI SAYMA (BAŞA SARMA İPTAL EDİLDİ) & ABONE SS
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -181,42 +181,40 @@ client.on('messageCreate', async message => {
     if (countingData) {
         const isTR = countingData.language === 'tr';
         const number = parseInt(message.content);
+        const expectedNumber = countingData.currentCount + 1; // Beklenen sayıyı baştan hesapladık
 
         if (isNaN(number)) {
             await message.react('❌');
             await message.member.timeout(5 * 1000, 'Sayı sayma kanalında metin kullandı.').catch(() => {}); 
             const errMsg = isTR 
-                ? `❌ <@${message.author.id}>, bu kanalda sadece sayı yazabilirsin! (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
-                : `❌ <@${message.author.id}>, you can only type numbers here! (Muted for 5s)\nCounting restarts at **1**.`;
+                ? `❌ <@${message.author.id}>, bu kanalda sadece sayı yazabilirsin! (5 Saniye Susturuldun)\nSayı kaldığı yerden devam ediyor. Beklenen sayı: **${expectedNumber}**`
+                : `❌ <@${message.author.id}>, you can only type numbers here! (Muted for 5s)\nContinuing from where we left off. Expected: **${expectedNumber}**`;
             await message.channel.send({ content: errMsg });
-            countingData.currentCount = 0; countingData.lastUserId = null; await countingData.save();
-            return;
+            return; 
         }
 
         if (countingData.lastUserId === message.author.id) {
             await message.react('❌');
             await message.member.timeout(5 * 1000, 'Art arda sayı saydı.').catch(() => {});
             const errMsg = isTR 
-                ? `❌ <@${message.author.id}>, art arda iki sayı yazamazsın! (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
-                : `❌ <@${message.author.id}>, you can't count twice in a row! (Muted for 5s)\nCounting restarts at **1**.`;
+                ? `❌ <@${message.author.id}>, art arda iki sayı yazamazsın! (5 Saniye Susturuldun)\nSayı kaldığı yerden devam ediyor. Beklenen sayı: **${expectedNumber}**`
+                : `❌ <@${message.author.id}>, you can't count twice in a row! (Muted for 5s)\nContinuing from where we left off. Expected: **${expectedNumber}**`;
             await message.channel.send({ content: errMsg });
-            countingData.currentCount = 0; countingData.lastUserId = null; await countingData.save();
             return;
         }
 
-        const expectedNumber = countingData.currentCount + 1;
-
         if (number === expectedNumber) {
             await message.react('✅');
-            countingData.currentCount = expectedNumber; countingData.lastUserId = message.author.id; await countingData.save();
+            countingData.currentCount = expectedNumber; 
+            countingData.lastUserId = message.author.id; 
+            await countingData.save();
         } else {
             await message.react('❌');
             await message.member.timeout(5 * 1000, 'Yanlış sayı saydı.').catch(() => {});
             const errMsg = isTR 
-                ? `❌ <@${message.author.id}> yanlış sayıyı yazdı! Beklenen sayı **${expectedNumber}** idi. (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
-                : `❌ <@${message.author.id}> typed the wrong number! Expected **${expectedNumber}**. (Muted for 5s)\nCounting restarts at **1**.`;
+                ? `❌ <@${message.author.id}> yanlış sayıyı yazdı! Beklenen sayı **${expectedNumber}** idi. (5 Saniye Susturuldun)\nSayı kaldığı yerden devam ediyor.`
+                : `❌ <@${message.author.id}> typed the wrong number! Expected **${expectedNumber}**. (Muted for 5s)\nContinuing from where we left off.`;
             await message.channel.send({ content: errMsg });
-            countingData.currentCount = 0; countingData.lastUserId = null; await countingData.save();
         }
         return; 
     }
@@ -272,15 +270,11 @@ client.on('messageCreate', async message => {
             const langText = isTurkishUser ? 'Türkçe (TR)' : 'English (EN)';
 
             if (hasName && hasSub) {
-                // ROLÜ VER
                 const roleId = isTR ? ayarlar.ABONE_ROL_ID : ayarlar.SUBSCRIBER_ROL_ID;
                 const role = message.guild.roles.cache.get(roleId);
                 if (role) await message.member.roles.add(role).catch(() => {});
 
-                // ===============================================
-                // MÜKEMMEL DOKUNUŞ: KANALI KULLANICIYA GİZLEME!
-                // Onaylanan kullanıcının SS kanalını görme izni silinir.
-                // ===============================================
+                // KANALI GİZLE
                 await message.channel.permissionOverwrites.delete(message.author.id).catch(() => {});
 
                 const dmEmbed = new EmbedBuilder().setColor('#00FF00').setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!').setDescription(isTR ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.` : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.`).setTimestamp();
@@ -381,9 +375,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        // ========================================================
-        // DİKKAT! KANALI GİZLEYİP AÇAN VE YENİ ROLÜ VEREN KISIM
-        // ========================================================
         if (customId === 'verify_tr' || customId === 'verify_en') {
             await interaction.deferReply({ ephemeral: true });
             
@@ -391,12 +382,11 @@ client.on('interactionCreate', async interaction => {
             const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
             const role = interaction.guild.roles.cache.get(roleId);
             
-            // Yeni istediğin ortak rol ID'si
             const verifyOrtakRolId = "1531054330852020277"; 
             const verifyOrtakRol = interaction.guild.roles.cache.get(verifyOrtakRolId);
 
-            const verifyChannelId = "1530994032900313219"; // Kayıt (Verify) kanalı
-            const targetChannelId = isTR ? "1530995336229945426" : "1530996048254734499"; // SS kanalları
+            const verifyChannelId = "1530994032900313219"; 
+            const targetChannelId = isTR ? "1530995336229945426" : "1530996048254734499"; 
 
             const verifyChannel = interaction.guild.channels.cache.get(verifyChannelId);
             const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
@@ -404,18 +394,15 @@ client.on('interactionCreate', async interaction => {
             if (!role && !verifyOrtakRol) return interaction.editReply({ content: '❌ **Rol bulunamadı! Lütfen yetkiliye bildirin.**' });
 
             try {
-                // 1. DİL ROLÜNÜ VE İSTEDİĞİN YENİ ORTAK ROLÜ VER
                 if (role) await interaction.member.roles.add(role);
                 if (verifyOrtakRol) await interaction.member.roles.add(verifyOrtakRol);
                 
-                // 2. KAYIT KANALINI O KİŞİYE GİZLE
                 if (verifyChannel) {
                     await verifyChannel.permissionOverwrites.create(interaction.user.id, {
                         ViewChannel: false
                     }).catch(() => {});
                 }
 
-                // 3. SADECE SS KANALINI GÖRME İZNİ VER
                 if (targetChannel) {
                     await targetChannel.permissionOverwrites.create(interaction.user.id, {
                         ViewChannel: true,
@@ -428,7 +415,6 @@ client.on('interactionCreate', async interaction => {
                     ? '✅ **Kayıt tamamlandı! Lütfen açılan özel kanala gidip YouTube abone ekran görüntünüzü atın.**' 
                     : '✅ **Verified! Please go to the newly opened channel and upload your YouTube subscription screenshot!**';
                 
-                // Kayıt Logu
                 const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);

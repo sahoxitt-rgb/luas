@@ -7,12 +7,14 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addStringOption(option => option.setName('isim').setDescription('Scriptin adını yazın.').setRequired(true))
         .addStringOption(option => option.setName('foto_linki').setDescription('Scriptin fotoğraf URL\'sini (Linkini) yapıştırın.').setRequired(true))
-        .addStringOption(option => option.setName('ozellikler').setDescription('Özellikleri aralarına VİRGÜL (,) koyarak yazın.').setRequired(true)),
+        .addStringOption(option => option.setName('ozellikler').setDescription('Özellikleri aralarına VİRGÜL (,) koyarak yazın.').setRequired(true))
+        .addStringOption(option => option.setName('loadstring').setDescription('Scriptin kodunu (Loadstring) buraya yapıştırın.').setRequired(true)),
 
     async execute(interaction) {
         const isim = interaction.options.getString('isim');
         const foto = interaction.options.getString('foto_linki');
         const ozelliklerRaw = interaction.options.getString('ozellikler');
+        const loadstring = interaction.options.getString('loadstring');
 
         // Özellikleri virgüllerden bölüp temizliyoruz
         const ozelliklerDizi = ozelliklerRaw.split(',').map(o => o.trim()).filter(o => o.length > 0);
@@ -35,6 +37,9 @@ module.exports = {
         // Yan yana sütunları embed'e ekleme
         if (solSutun.length > 0) embed.addFields({ name: '✨ Özellikler', value: solSutun.join('\n'), inline: true });
         if (sagSutun.length > 0) embed.addFields({ name: '⚡ Ekstra Özellikler', value: sagSutun.join('\n'), inline: true });
+
+        // Loadstring Bloğunu ekleme (Kopyalaması kolay olsun diye Lua formatında)
+        embed.addFields({ name: '📜 Script Kodları (Loadstring)', value: `\`\`\`lua\n${loadstring}\n\`\`\``, inline: false });
 
         await interaction.reply({ embeds: [embed] });
     }
