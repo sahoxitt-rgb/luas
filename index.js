@@ -39,7 +39,6 @@ const TicketSchema = new mongoose.Schema({
 });
 const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
-// YENİ: KANAL AYARLARI (Panel Kurulan Kanalları Tutar)
 const ConfigSchema = new mongoose.Schema({
     id: { type: String, default: "config" },
     tr_ss_channel: { type: String, default: null },
@@ -125,41 +124,51 @@ let queueCount = 0;
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // Veritabanından hangi kanalların kurulduğunu çek
     const config = await ConfigModel.findOne({ id: "config" });
     if (!config) return;
 
     if (message.channel.id === config.tr_ss_channel || message.channel.id === config.en_ss_channel) {
         const isTR = message.channel.id === config.tr_ss_channel;
 
-        // 1. Resim yoksa uyarıp sil
+        // 1. Resim yoksa uyarıp sil (Dile göre ayarlı)
         if (message.attachments.size === 0) {
             await message.delete().catch(() => {});
-            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Bu kanala fotoğraf dışında bir şey atılamaz! Mesajınız silindi.**` });
+            const warnContent = isTR 
+                ? `<@${message.author.id}>, ❌ **Bu kanala fotoğraf dışında bir şey atılamaz! Mesajınız silindi.**`
+                : `<@${message.author.id}>, ❌ **You can only send images in this channel! Your message was deleted.**`;
+            const warnMsg = await message.channel.send({ content: warnContent });
             setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
             return;
         }
 
         const attachment = message.attachments.first();
-        // 2. Eklenen dosya resim değilse veya GIF ise SİL
+        // 2. Eklenen dosya resim değilse veya GIF ise (Dile göre ayarlı)
         if (!attachment.contentType || !attachment.contentType.startsWith('image/') || attachment.contentType === 'image/gif') {
             await message.delete().catch(() => {});
-            const warnMsg = await message.channel.send({ content: `<@${message.author.id}>, ❌ **Geçersiz dosya veya GIF! Sadece fotoğraf (PNG/JPG) yükleyebilirsiniz.**` });
+            const warnContent = isTR
+                ? `<@${message.author.id}>, ❌ **Geçersiz dosya veya GIF! Sadece fotoğraf (PNG/JPG) yükleyebilirsiniz.**`
+                : `<@${message.author.id}>, ❌ **Invalid file or GIF! You can only upload photos (PNG/JPG).**`;
+            const warnMsg = await message.channel.send({ content: warnContent });
             setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
             return;
         }
 
         queueCount++;
-        const processingMsg = await message.reply({ 
-            content: `🤖 **Luas Yapay Zeka** tarafından SS'iniz inceleniyor...\n⏳ *Lütfen bekleyiniz. Tahmini bekleme süresi: 5-15 saniye.*\n📊 *Resim Sırası: ${queueCount}*` 
-        });
+        const processingContent = isTR
+            ? `🤖 **Luas Yapay Zeka** tarafından SS'iniz inceleniyor...\n⏳ *Lütfen bekleyiniz. Tahmini bekleme süresi: 5-15 saniye.*\n📊 *Resim Sırası: ${queueCount}*`
+            : `🤖 **Luas AI** is analyzing your screenshot...\n⏳ *Please wait. Estimated time: 5-15 seconds.*\n📊 *Queue Position: ${queueCount}*`;
+            
+        const processingMsg = await message.reply({ content: processingContent });
 
         try {
             const { data: { text } } = await Tesseract.recognize(attachment.url, isTR ? 'tur' : 'eng');
-            const lowerText = text.toLowerCase().replace(/\s+/g, ' '); 
             
-            const hasName = lowerText.includes('luasscript') || lowerText.includes('luas script') || lowerText.includes('@luasscript');
-            const hasSub = isTR ? (lowerText.includes('abone olundu') || lowerText.includes('abone eklendi')) : (lowerText.includes('subscribed'));
+            // YENİ VE DAHA GÜÇLÜ ALGORİTMA: Bütün boşlukları ve gereksiz sembolleri siliyoruz! 
+            // Bu sayede siyah temalı zor okunan PC ekranlarını (L u a S vb.) bile hatasız anlar.
+            const cleanText = text.toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, ''); 
+            
+            const hasName = cleanText.includes('luas');
+            const hasSub = cleanText.includes('abone') || cleanText.includes('sub');
 
             const logChannel = message.guild.channels.cache.get(ayarlar.ABONE_LOG_KANAL_ID);
             const joinedTimestamp = Math.floor(message.member.joinedTimestamp / 1000);
@@ -182,7 +191,7 @@ client.on('messageCreate', async message => {
                     .setTimestamp();
                 await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
 
-                // Detaylı Log
+                // Detaylı Log (AI Çıktısı Kaldırıldı)
                 if (logChannel) {
                     const logEmbed = new EmbedBuilder()
                         .setColor('#00FF00')
@@ -192,21 +201,24 @@ client.on('messageCreate', async message => {
                                         `🆔 **ID:** \`${message.author.id}\`\n` +
                                         `📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n` +
                                         `🌍 **Kayıtlı Dil:** \`${langText}\`\n` +
-                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>\n\n` +
-                                        `🤖 **Yapay Zeka (AI) Çıktısı:**\n\`\`\`${lowerText.substring(0, 800)}\`\`\``)
+                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>`)
                         .setImage(attachment.url)
                         .setTimestamp();
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
 
-                await processingMsg.edit({ content: `✅ **Onaylandı!** Rolünüz başarıyla verildi. <@${message.author.id}>` });
+                const successMsg = isTR 
+                    ? `✅ **Onaylandı!** Rolünüz başarıyla verildi. <@${message.author.id}>`
+                    : `✅ **Verified!** Your role has been given. <@${message.author.id}>`;
+                await processingMsg.edit({ content: successMsg });
+                
                 setTimeout(() => {
                     processingMsg.delete().catch(() => {});
                     message.delete().catch(() => {});
                 }, 5000);
 
             } else {
-                // BAŞARISIZ DURUM (Sade Uyarı)
+                // BAŞARISIZ DURUM
                 const dmEmbed = new EmbedBuilder()
                     .setColor('#FF0000')
                     .setTitle(isTR ? '❌ Aboneliğiniz Onaylanmadı' : '❌ Subscription Failed')
@@ -225,14 +237,17 @@ client.on('messageCreate', async message => {
                                         `🆔 **ID:** \`${message.author.id}\`\n` +
                                         `📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n` +
                                         `🌍 **Kayıtlı Dil:** \`${langText}\`\n` +
-                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>\n\n` +
-                                        `🤖 **Yapay Zeka (AI) Çıktısı (Okuyabildiği Kısım):**\n\`\`\`${lowerText.substring(0, 800) || "Yazı okunamadı."}\`\`\``)
+                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>`)
                         .setImage(attachment.url)
                         .setTimestamp();
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
 
-                await processingMsg.edit({ content: `❌ **Onaylanmadı!** SS yapay zeka tarafından reddedildi. DM'nizi kontrol edin. <@${message.author.id}>` });
+                const failMsg = isTR
+                    ? `❌ **Onaylanmadı!** SS yapay zeka tarafından reddedildi. DM'nizi kontrol edin. <@${message.author.id}>`
+                    : `❌ **Failed!** Screenshot rejected by AI. Check your DMs. <@${message.author.id}>`;
+                await processingMsg.edit({ content: failMsg });
+                
                 setTimeout(() => {
                     processingMsg.delete().catch(() => {});
                     message.delete().catch(() => {}); 
@@ -241,7 +256,10 @@ client.on('messageCreate', async message => {
             queueCount--; 
         } catch (error) {
             console.error('OCR Hata:', error);
-            await processingMsg.edit({ content: `❌ Sistemsel bir hata oluştu, işlemi daha sonra tekrar deneyin.` });
+            const errorMsg = isTR 
+                ? `❌ Sistemsel bir hata oluştu, işlemi daha sonra tekrar deneyin.`
+                : `❌ A system error occurred, please try again later.`;
+            await processingMsg.edit({ content: errorMsg });
             queueCount--;
         }
     }
