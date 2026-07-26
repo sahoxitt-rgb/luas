@@ -106,24 +106,37 @@ for (const file of commandFiles) {
     }
 }
 
-client.once('ready', async () => {
+// UYARI VERMEMESİ İÇİN 'ready' YERİNE 'clientReady' KULLANILDI
+client.once('clientReady', async () => {
     console.log(`🤖 Discord botu aktif edildi! Giriş: ${client.user.tag}`);
 
-    // --- 7/24 SESE BAĞLANMA ---
+    // --- 7/24 SESE BAĞLANMA (ÇÖKME KORUMALI) ---
     const voiceChannelId = ayarlar.SES_KANAL_ID;
     if (voiceChannelId) {
         const channel = client.channels.cache.get(voiceChannelId);
         if (channel && channel.isVoiceBased()) {
-            joinVoiceChannel({
-                channelId: channel.id,
-                guildId: channel.guild.id,
-                adapterCreator: channel.guild.voiceAdapterCreator,
-            });
-            console.log(`🔊 7/24 Ses kanalına bağlanıldı: ${channel.name}`);
+            try {
+                const connection = joinVoiceChannel({
+                    channelId: channel.id,
+                    guildId: channel.guild.id,
+                    adapterCreator: channel.guild.voiceAdapterCreator,
+                    selfDeaf: true, // Botun kanaldaki sesleri dinlemesini kapatır (Render yorulmaz)
+                    selfMute: true
+                });
+
+                // HATA YAKALAYICI: Render UDP portunu engellese bile bot çökmeyecek!
+                connection.on('error', (error) => {
+                    console.log(`⚠️ Ses Bağlantı Uyarı (Önemsiz): ${error.message}`);
+                });
+
+                console.log(`🔊 7/24 Ses kanalına bağlanıldı: ${channel.name}`);
+            } catch (e) {
+                console.log(`⚠️ Sese bağlanılamadı: ${e.message}`);
+            }
         }
     }
 
-    // --- YENİ: BOT BAŞLATILDI LOGU ---
+    // --- BOT BAŞLATILDI LOGU ---
     const botLogChannelId = ayarlar.BOT_LOG_KANAL_ID;
     if (botLogChannelId) {
         const logChannel = client.channels.cache.get(botLogChannelId);
