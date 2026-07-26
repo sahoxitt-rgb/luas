@@ -14,7 +14,7 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// MONGODB BAĞLANTISI VE ŞEMA
+// MONGODB BAĞLANTISI VE ŞEMALAR
 // ==========================================
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://luas:luasorj@cluster0.i2qdv7n.mongodb.net/?appName=Cluster0";
 
@@ -30,6 +30,10 @@ const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
 const ConfigSchema = new mongoose.Schema({ id: { type: String, default: "config" }, tr_ss_channel: { type: String, default: null }, en_ss_channel: { type: String, default: null } });
 const ConfigModel = mongoose.model('Config', ConfigSchema);
+
+// YENİ: SAYI SAYMA SİSTEMİ VERİTABANI
+const CountingSchema = new mongoose.Schema({ guildId: String, channelId: String, language: String, currentCount: { type: Number, default: 0 }, lastUserId: { type: String, default: null } });
+const CountingModel = mongoose.model('Counting', CountingSchema);
 
 // ==========================================
 // EXPRESS API (KÖPRÜ)
@@ -69,7 +73,6 @@ for (const file of commandFiles) {
 client.once('clientReady', async () => {
     console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
-    // --- 7/24 SESE BAĞLANMA ---
     const voiceChannelId = ayarlar.SES_KANAL_ID;
     if (voiceChannelId) {
         const channel = client.channels.cache.get(voiceChannelId);
@@ -82,7 +85,6 @@ client.once('clientReady', async () => {
         }
     }
 
-    // --- BOT BAŞLATILDI LOGU ---
     const botLogChannelId = ayarlar.BOT_LOG_KANAL_ID;
     if (botLogChannelId) {
         const logChannel = client.channels.cache.get(botLogChannelId);
@@ -92,7 +94,6 @@ client.once('clientReady', async () => {
         }
     }
 
-    // --- 30 DAKİKADA BİR SAĞLIK RAPORU ---
     setInterval(async () => {
         const reportChannelId = ayarlar.RAPOR_LOG_KANAL_ID;
         if (!reportChannelId) return;
@@ -113,7 +114,6 @@ client.once('clientReady', async () => {
     } catch (error) { console.error("⛔ Komut yükleme hatası:", error); }
 });
 
-// --- HATA YAKALAYICILAR ---
 async function sendErrorLog(errorText) {
     const errorChannelId = ayarlar.HATA_LOG_KANAL_ID;
     if (!errorChannelId) return;
@@ -126,35 +126,30 @@ process.on('unhandledRejection', async (error) => await sendErrorLog(error.stack
 process.on('uncaughtException', async (error) => await sendErrorLog(error.stack || error.message || String(error)));
 
 // ==========================================
-// BOOST DEDEKTÖRÜ VE BOOST OTO ROL SİSTEMİ
+// BOOST DEDEKTÖRÜ (ÖZEL KANAL + OTO ROL)
 // ==========================================
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     if (!oldMember.premiumSince && newMember.premiumSince) {
-        
-        // 1. Boost Basanlara Oto-Rol Verme
-        const boostRolId = "1531013766945308863";
+        const boostRolId = "1531013766945308863"; 
         const boostRol = newMember.guild.roles.cache.get(boostRolId);
-        if (boostRol) {
-            await newMember.roles.add(boostRol).catch(() => {});
-        }
+        if (boostRol) { await newMember.roles.add(boostRol).catch(() => {}); }
 
-        // 2. Boost Log Mesajı
-        const boostChannelId = ayarlar.BOOST_LOG_KANAL_ID;
-        if (boostChannelId) {
-            const channel = newMember.guild.channels.cache.get(boostChannelId);
-            if (channel) {
-                const boostEmbed = new EmbedBuilder()
-                    .setColor('#FF73FA') 
-                    .setTitle('🚀 Sunucuya Yeni Takviye (Boost) Basıldı!')
-                    .setDescription(`🎉 Çok teşekkürler <@${newMember.id}>! Sunucumuza boost basarak bize büyük destek oldun ve özel rolünü kazandın!\n\n` +
-                                    `💎 **Sunucu Takviye Seviyesi:** \`${newMember.guild.premiumTier}\`\n` +
-                                    `📈 **Toplam Boost Sayısı:** \`${newMember.guild.premiumSubscriptionCount}\``)
-                    .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
-                    .setFooter({ text: 'Luas • Boost Sistemi' })
-                    .setTimestamp();
-                
-                await channel.send({ content: `Hey <@${newMember.id}>, desteğin için teşekkürler! 💖`, embeds: [boostEmbed] }).catch(() => {});
-            }
+        const boostChannelId = "1531012700610629822"; 
+        const channel = newMember.guild.channels.cache.get(boostChannelId);
+        
+        if (channel) {
+            const boostEmbed = new EmbedBuilder()
+                .setColor('#FF73FA') 
+                .setTitle('🚀 Sunucumuza Yeni Bir Takviye (Boost) Geldi!')
+                .setDescription(`🎉 **<@${newMember.id}> sunucumuza boost bastı!**\n\n` +
+                                `Bize destek olduğun için sana çok teşekkür ederiz. Özel **<@&${boostRolId}>** rolün otomatik olarak verildi!\n\n` +
+                                `💎 **Sunucu Seviyesi:** \`${newMember.guild.premiumTier}\`\n` +
+                                `📈 **Toplam Boost:** \`${newMember.guild.premiumSubscriptionCount}\``)
+                .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+                .setFooter({ text: 'Luas • Boost Sistemi' })
+                .setTimestamp();
+            
+            await channel.send({ content: `Hey <@${newMember.id}>, desteğin için sonsuz teşekkürler! 💖`, embeds: [boostEmbed] }).catch(() => {});
         }
     }
 });
@@ -176,12 +171,71 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// YAZI ENGEL VE YAPAY ZEKA ABONE SS KONTROLÜ
+// SAYI SAYMA & ABONE SS MERKEZİ (messageCreate)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
+    // --- 1. SAYI SAYMA SİSTEMİ KONTROLÜ ---
+    const countingData = await CountingModel.findOne({ channelId: message.channel.id });
+    if (countingData) {
+        const isTR = countingData.language === 'tr';
+        const number = parseInt(message.content);
+
+        // Sayı dışında bir şey yazıldıysa (Örn: harf)
+        if (isNaN(number)) {
+            await message.react('❌');
+            await message.member.timeout(5 * 1000, 'Sayı sayma kanalında metin kullandı.').catch(() => {}); // 5 Saniye Mute
+            const errMsg = isTR 
+                ? `❌ <@${message.author.id}>, bu kanalda sadece sayı yazabilirsin! (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
+                : `❌ <@${message.author.id}>, you can only type numbers here! (Muted for 5s)\nCounting restarts at **1**.`;
+            await message.channel.send({ content: errMsg });
+            countingData.currentCount = 0;
+            countingData.lastUserId = null;
+            await countingData.save();
+            return;
+        }
+
+        // Art arda aynı kişi yazdıysa
+        if (countingData.lastUserId === message.author.id) {
+            await message.react('❌');
+            await message.member.timeout(5 * 1000, 'Art arda sayı saydı.').catch(() => {});
+            const errMsg = isTR 
+                ? `❌ <@${message.author.id}>, art arda iki sayı yazamazsın! (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
+                : `❌ <@${message.author.id}>, you can't count twice in a row! (Muted for 5s)\nCounting restarts at **1**.`;
+            await message.channel.send({ content: errMsg });
+            countingData.currentCount = 0;
+            countingData.lastUserId = null;
+            await countingData.save();
+            return;
+        }
+
+        const expectedNumber = countingData.currentCount + 1;
+
+        // Doğru Sayıysa
+        if (number === expectedNumber) {
+            await message.react('✅');
+            countingData.currentCount = expectedNumber;
+            countingData.lastUserId = message.author.id;
+            await countingData.save();
+        } 
+        // Yanlış Sayıysa
+        else {
+            await message.react('❌');
+            await message.member.timeout(5 * 1000, 'Yanlış sayı saydı.').catch(() => {});
+            const errMsg = isTR 
+                ? `❌ <@${message.author.id}> yanlış sayıyı yazdı! Beklenen sayı **${expectedNumber}** idi. (5 Saniye Susturuldun)\nSayı baştan **(1)** başlıyor.`
+                : `❌ <@${message.author.id}> typed the wrong number! Expected **${expectedNumber}**. (Muted for 5s)\nCounting restarts at **1**.`;
+            await message.channel.send({ content: errMsg });
+            countingData.currentCount = 0;
+            countingData.lastUserId = null;
+            await countingData.save();
+        }
+        return; // Sayı sayma kanalıysa aşağıdaki SS sistemine girmemesi için işlemi durdurur.
+    }
+
+    // --- 2. ABONE SS KONTROLÜ (YAPAY ZEKA) ---
     const config = await ConfigModel.findOne({ id: "config" });
     if (!config) return;
 
@@ -233,81 +287,36 @@ client.on('messageCreate', async message => {
                 const role = message.guild.roles.cache.get(roleId);
                 if (role) await message.member.roles.add(role).catch(() => {});
 
-                const dmEmbed = new EmbedBuilder()
-                    .setColor('#00FF00')
-                    .setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!')
-                    .setDescription(isTR 
-                        ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.`
-                        : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.`)
-                    .setTimestamp();
+                const dmEmbed = new EmbedBuilder().setColor('#00FF00').setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!').setDescription(isTR ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.` : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.`).setTimestamp();
                 await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
 
                 if (logChannel) {
-                    const logEmbed = new EmbedBuilder()
-                        .setColor('#00FF00')
-                        .setTitle('✅ Başarılı Abone Onayı')
-                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n` +
-                                        `🏷️ **İsim:** \`${message.author.tag}\`\n` +
-                                        `🆔 **ID:** \`${message.author.id}\`\n` +
-                                        `📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n` +
-                                        `🌍 **Kayıtlı Dil:** \`${langText}\`\n` +
-                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>`)
-                        .setImage(attachment.url)
-                        .setTimestamp();
+                    const logEmbed = new EmbedBuilder().setColor('#00FF00').setTitle('✅ Başarılı Abone Onayı').setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n🏷️ **İsim:** \`${message.author.tag}\`\n🆔 **ID:** \`${message.author.id}\`\n📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n🌍 **Kayıtlı Dil:** \`${langText}\`\n⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>`).setImage(attachment.url).setTimestamp();
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
 
-                const successMsg = isTR 
-                    ? `✅ **Onaylandı!** Rolünüz başarıyla verildi. <@${message.author.id}>`
-                    : `✅ **Verified!** Your role has been given. <@${message.author.id}>`;
+                const successMsg = isTR ? `✅ **Onaylandı!** Rolünüz başarıyla verildi. <@${message.author.id}>` : `✅ **Verified!** Your role has been given. <@${message.author.id}>`;
                 await processingMsg.edit({ content: successMsg });
                 
-                setTimeout(() => {
-                    processingMsg.delete().catch(() => {});
-                    message.delete().catch(() => {});
-                }, 5000);
-
+                setTimeout(() => { processingMsg.delete().catch(() => {}); message.delete().catch(() => {}); }, 5000);
             } else {
-                const dmEmbed = new EmbedBuilder()
-                    .setColor('#FF0000')
-                    .setTitle(isTR ? '❌ Aboneliğiniz Onaylanmadı' : '❌ Subscription Failed')
-                    .setDescription(isTR 
-                        ? `Maalesef gönderdiğiniz görsel yapay zeka tarafından reddedildi.\n\nLütfen görselin doğruluğunu kontrol edip geçerli bir SS ile tekrar deneyin.`
-                        : `Unfortunately, your screenshot was rejected by the AI.\n\nPlease check the image and try again with a valid screenshot.`)
-                    .setTimestamp();
+                const dmEmbed = new EmbedBuilder().setColor('#FF0000').setTitle(isTR ? '❌ Aboneliğiniz Onaylanmadı' : '❌ Subscription Failed').setDescription(isTR ? `Maalesef gönderdiğiniz görsel yapay zeka tarafından reddedildi.\n\nLütfen görselin doğruluğunu kontrol edip geçerli bir SS ile tekrar deneyin.` : `Unfortunately, your screenshot was rejected by the AI.\n\nPlease check the image and try again with a valid screenshot.`).setTimestamp();
                 await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
 
                 if (logChannel) {
-                    const logEmbed = new EmbedBuilder()
-                        .setColor('#FF0000')
-                        .setTitle('❌ Reddedilen Abone İşlemi')
-                        .setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n` +
-                                        `🏷️ **İsim:** \`${message.author.tag}\`\n` +
-                                        `🆔 **ID:** \`${message.author.id}\`\n` +
-                                        `📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n` +
-                                        `🌍 **Kayıtlı Dil:** \`${langText}\`\n` +
-                                        `⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>`)
-                        .setImage(attachment.url)
-                        .setTimestamp();
+                    const logEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('❌ Reddedilen Abone İşlemi').setDescription(`👤 **Kullanıcı:** <@${message.author.id}>\n🏷️ **İsim:** \`${message.author.tag}\`\n🆔 **ID:** \`${message.author.id}\`\n📥 **Sunucuya Giriş:** <t:${joinedTimestamp}:F>\n🌍 **Kayıtlı Dil:** \`${langText}\`\n⏰ **Atılan Saat:** <t:${Math.floor(Date.now() / 1000)}:T>`).setImage(attachment.url).setTimestamp();
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
 
-                const failMsg = isTR
-                    ? `❌ **Onaylanmadı!** SS yapay zeka tarafından reddedildi. DM'nizi kontrol edin. <@${message.author.id}>`
-                    : `❌ **Failed!** Screenshot rejected by AI. Check your DMs. <@${message.author.id}>`;
+                const failMsg = isTR ? `❌ **Onaylanmadı!** SS yapay zeka tarafından reddedildi. DM'nizi kontrol edin. <@${message.author.id}>` : `❌ **Failed!** Screenshot rejected by AI. Check your DMs. <@${message.author.id}>`;
                 await processingMsg.edit({ content: failMsg });
                 
-                setTimeout(() => {
-                    processingMsg.delete().catch(() => {});
-                    message.delete().catch(() => {}); 
-                }, 7000);
+                setTimeout(() => { processingMsg.delete().catch(() => {}); message.delete().catch(() => {}); }, 7000);
             }
             queueCount--; 
         } catch (error) {
             console.error('OCR Hata:', error);
-            const errorMsg = isTR 
-                ? `❌ Sistemsel bir hata oluştu, işlemi daha sonra tekrar deneyin.`
-                : `❌ A system error occurred, please try again later.`;
+            const errorMsg = isTR ? `❌ Sistemsel bir hata oluştu, işlemi daha sonra tekrar deneyin.` : `❌ A system error occurred, please try again later.`;
             await processingMsg.edit({ content: errorMsg });
             queueCount--;
         }
@@ -318,37 +327,22 @@ client.on('messageCreate', async message => {
 // GİRİŞ/ÇIKIŞ LOG VE İLK GELENLERE OTO ROL
 // ==========================================
 client.on('guildMemberAdd', async member => {
-    // 1. Yeni Gelenlere Oto Rol Verme
     const otoRolId = "1531015008815677620";
     const otoRol = member.guild.roles.cache.get(otoRolId);
-    if (otoRol) {
-        await member.roles.add(otoRol).catch(() => {});
-    }
+    if (otoRol) { await member.roles.add(otoRol).catch(() => {}); }
 
-    // 2. DM Gönderme
     try {
-        const dmEmbed = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle(`🎉 Luas'a Hoş Geldiniz!`)
-            .setDescription(`Merhaba **${member.user.username}**,\n\n**Luas** sunucumuza hoş geldin! Script hakkında daha fazla bilgi almak ve ayrıcalıklardan yararlanmak için sunucumuza göz atabilirsin. İyi eğlenceler!`)
-            .setTimestamp();
+        const dmEmbed = new EmbedBuilder().setColor('#00FF00').setTitle(`🎉 Luas'a Hoş Geldiniz!`).setDescription(`Merhaba **${member.user.username}**,\n\n**Luas** sunucumuza hoş geldin! Script hakkında daha fazla bilgi almak ve ayrıcalıklardan yararlanmak için sunucumuza göz atabilirsin. İyi eğlenceler!`).setTimestamp();
         await member.send({ embeds: [dmEmbed] }).catch(() => {});
     } catch (err) {}
 
-    // 3. Giriş Logu
     const joinChannelId = ayarlar.JOIN_LOG_KANAL_ID;
     if (joinChannelId) {
         const channel = member.guild.channels.cache.get(joinChannelId);
         if (channel) {
             const joinedTimestamp = Math.floor(member.joinedTimestamp / 1000);
             const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
-            const joinEmbed = new EmbedBuilder()
-                .setColor('#00FF00')
-                .setTitle('📥 Sunucuya Yeni Üye Katıldı (Join)')
-                .setDescription(`👤 **Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n📥 **Sunucuya Katılım -->** <t:${joinedTimestamp}:F>\n📅 **Discord Hesap Açılışı -->** <t:${createdTimestamp}:F>\n👥 **Toplam Üye Sayısı -->** \`${member.guild.memberCount}\``)
-                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                .setFooter({ text: 'Luas • Giriş Sistemi' })
-                .setTimestamp();
+            const joinEmbed = new EmbedBuilder().setColor('#00FF00').setTitle('📥 Sunucuya Yeni Üye Katıldı (Join)').setDescription(`👤 **Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n📥 **Sunucuya Katılım -->** <t:${joinedTimestamp}:F>\n📅 **Discord Hesap Açılışı -->** <t:${createdTimestamp}:F>\n👥 **Toplam Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })).setFooter({ text: 'Luas • Giriş Sistemi' }).setTimestamp();
             await channel.send({ embeds: [joinEmbed] }).catch(() => {});
         }
     }
@@ -359,13 +353,7 @@ client.on('guildMemberRemove', async member => {
     if (leaveChannelId) {
         const channel = member.guild.channels.cache.get(leaveChannelId);
         if (channel) {
-            const leaveEmbed = new EmbedBuilder()
-                .setColor('#FF0000')
-                .setTitle('📤 Sunucudan Üye Ayrıldı (Leave)')
-                .setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``)
-                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                .setFooter({ text: 'Luas • Çıkış Sistemi' })
-                .setTimestamp();
+            const leaveEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('📤 Sunucudan Üye Ayrıldı (Leave)').setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })).setFooter({ text: 'Luas • Çıkış Sistemi' }).setTimestamp();
             await channel.send({ embeds: [leaveEmbed] }).catch(() => {});
         }
     }
@@ -378,19 +366,19 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
-        try { await command.execute(interaction); } 
+        
+        // Komutlara CountingModel'i aktarıyoruz
+        try { await command.execute(interaction, UserModel, TicketModel, ConfigModel, CountingModel); } 
         catch (error) { console.error(error); }
         return;
     }
 
-    if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === 'ticket_select') {
-            const categoryValue = interaction.values[0]; 
-            const modal = new ModalBuilder().setCustomId(`ticketModal_${categoryValue}`).setTitle('🎫 Bilet Oluşturma Formu');
-            const reasonInput = new TextInputBuilder().setCustomId('ticketReason').setLabel('Lütfen sorununuzu detaylı açıklayın').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(10).setMaxLength(1000);
-            modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-            await interaction.showModal(modal);
-        }
+    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
+        const categoryValue = interaction.values[0]; 
+        const modal = new ModalBuilder().setCustomId(`ticketModal_${categoryValue}`).setTitle('🎫 Bilet Oluşturma Formu');
+        const reasonInput = new TextInputBuilder().setCustomId('ticketReason').setLabel('Lütfen sorununuzu detaylı açıklayın').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(10).setMaxLength(1000);
+        modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+        await interaction.showModal(modal);
         return;
     }
 
