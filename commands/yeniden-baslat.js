@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { spawn } = require('child_process');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -21,10 +22,16 @@ module.exports = {
 
         await interaction.reply({ embeds: [embed] });
 
-        // Mesaj gittikten 2 saniye sonra botu kapatır, VDS/Host otomatik geri açar.
+        // Bat dosyası olmadan Node.js üzerinden kendi kendini yeniden başlatan özel algoritma
         setTimeout(() => {
-            console.log('🔄 Bot yeniden başlatılıyor...');
-            process.exit(1); 
+            interaction.client.destroy(); // Bağlantıyı güvenlice kopar
+            
+            const child = spawn(process.argv[0], process.argv.slice(1), {
+                detached: true,
+                stdio: 'inherit' // VS Code terminalinde logları görmeni sağlar
+            });
+            child.unref();
+            process.exit(); // Eski botu kapat, yenisi çoktan ayaklandı!
         }, 2000);
     }
 };
