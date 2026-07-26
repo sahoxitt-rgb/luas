@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
-const { joinVoiceChannel } = require('@discordjs/voice'); // YENİ: SES MODÜLÜ
+const { joinVoiceChannel } = require('@discordjs/voice');
 
 const ayarlar = require('./roller.js');
 
@@ -87,7 +87,7 @@ const client = new Client({
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates, // YENİ: Ses kanalına girebilmesi için izin
+        GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildMembers 
     ]
 });
@@ -109,7 +109,7 @@ for (const file of commandFiles) {
 client.once('ready', async () => {
     console.log(`🤖 Discord botu aktif edildi! Giriş: ${client.user.tag}`);
 
-    // --- 7/24 SESE BAĞLANMA İŞLEMİ ---
+    // --- 7/24 SESE BAĞLANMA ---
     const voiceChannelId = ayarlar.SES_KANAL_ID;
     if (voiceChannelId) {
         const channel = client.channels.cache.get(voiceChannelId);
@@ -120,8 +120,25 @@ client.once('ready', async () => {
                 adapterCreator: channel.guild.voiceAdapterCreator,
             });
             console.log(`🔊 7/24 Ses kanalına bağlanıldı: ${channel.name}`);
-        } else {
-            console.log(`⚠️ Ses kanalı bulunamadı veya ID hatalı!`);
+        }
+    }
+
+    // --- YENİ: BOT BAŞLATILDI LOGU ---
+    const botLogChannelId = ayarlar.BOT_LOG_KANAL_ID;
+    if (botLogChannelId) {
+        const logChannel = client.channels.cache.get(botLogChannelId);
+        if (logChannel) {
+            const startEmbed = new EmbedBuilder()
+                .setColor('#00FF00')
+                .setTitle('🟢 Sistem Aktif (Bot Başlatıldı)')
+                .setDescription(`🤖 **Bot Adı -->** \`${client.user.tag}\`\n` +
+                                `📡 **Gecikme (Ping) -->** \`${client.ws.ping}ms\`\n` +
+                                `⏰ **Aktif Olma Zamanı -->** <t:${Math.floor(Date.now() / 1000)}:F>\n\n` +
+                                `✅ **Bütün sistemler tıkır tıkır çalışıyor.**`)
+                .setThumbnail(client.user.displayAvatarURL({ dynamic: true }))
+                .setFooter({ text: 'Luas • Sistem Durumu' })
+                .setTimestamp();
+            await logChannel.send({ embeds: [startEmbed] }).catch(() => {});
         }
     }
 
