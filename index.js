@@ -225,7 +225,6 @@ client.on('messageCreate', async message => {
     const config = await ConfigModel.findOne({ id: "config" });
     if (!config) return;
 
-    // Özel ID'leri buraya tanımladık
     const tr_kanal = "1530995336229945426";
     const en_kanal = "1530996048254734499";
 
@@ -280,7 +279,7 @@ client.on('messageCreate', async message => {
 
                 // ===============================================
                 // MÜKEMMEL DOKUNUŞ: KANALI KULLANICIYA GİZLEME!
-                // Onaylanan kullanıcının bu kanalı görme izni siliniyor.
+                // Onaylanan kullanıcının SS kanalını görme izni silinir.
                 // ===============================================
                 await message.channel.permissionOverwrites.delete(message.author.id).catch(() => {});
 
@@ -383,7 +382,7 @@ client.on('interactionCreate', async interaction => {
         const { customId } = interaction;
 
         // ========================================================
-        // DİKKAT! KANALI SADECE SEÇENLERE ÖZEL OLARAK AÇAN SİHİRLİ KISIM
+        // DİKKAT! KANALI GİZLEYİP AÇAN KUSURSUZ SİSTEM BURADA
         // ========================================================
         if (customId === 'verify_tr' || customId === 'verify_en') {
             await interaction.deferReply({ ephemeral: true });
@@ -392,17 +391,26 @@ client.on('interactionCreate', async interaction => {
             const roleId = isTR ? ayarlar.TR_ROL_ID : ayarlar.EN_ROL_ID; 
             const role = interaction.guild.roles.cache.get(roleId);
             
-            // Sen bana bu ID'leri verdin:
-            const targetChannelId = isTR ? "1530995336229945426" : "1530996048254734499";
+            const verifyChannelId = "1530994032900313219"; // Kayıt (Verify) kanalı
+            const targetChannelId = isTR ? "1530995336229945426" : "1530996048254734499"; // SS kanalları
+
+            const verifyChannel = interaction.guild.channels.cache.get(verifyChannelId);
             const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
 
             if (!role) return interaction.editReply({ content: '❌ **Rol bulunamadı! Lütfen yetkiliye bildirin.**' });
 
             try {
-                // 1. DİL ROLÜNÜ VERİYORUZ
+                // 1. Dil Rolünü ver
                 await interaction.member.roles.add(role);
                 
-                // 2. ADAMA ÖZEL OLARAK O KANALI GÖRME İZNİ VERİYORUZ!
+                // 2. KAYIT KANALINI O KİŞİYE GİZLE (Puff diye yok olacak)
+                if (verifyChannel) {
+                    await verifyChannel.permissionOverwrites.create(interaction.user.id, {
+                        ViewChannel: false
+                    }).catch(() => {});
+                }
+
+                // 3. SADECE SS KANALINI GÖRME İZNİ VER (Başka hiçbir yeri göremez)
                 if (targetChannel) {
                     await targetChannel.permissionOverwrites.create(interaction.user.id, {
                         ViewChannel: true,
@@ -411,7 +419,9 @@ client.on('interactionCreate', async interaction => {
                     }).catch(() => {});
                 }
 
-                const msg = isTR ? '✅ **Kayıt tamamlandı, onaylanmak için açılan yeni kanala gidip YouTube abone SS\'inizi atın!**' : '✅ **Successfully verified! Please go to the newly opened channel and upload your YouTube subscription screenshot!**';
+                const msg = isTR 
+                    ? '✅ **Kayıt tamamlandı! Lütfen açılan özel kanala gidip YouTube abone ekran görüntünüzü atın.**' 
+                    : '✅ **Verified! Please go to the newly opened channel and upload your YouTube subscription screenshot!**';
                 
                 // Kayıt Logu
                 const logChannelId = ayarlar.KAYIT_LOG_KANAL_ID;
