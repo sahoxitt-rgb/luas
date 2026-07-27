@@ -7,11 +7,18 @@ const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
 const { joinVoiceChannel } = require('@discordjs/voice');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const ayarlar = require('./roller.js');
 
 const app = express();
 app.use(express.json());
+
+// ==========================================
+// YAPAY ZEKA (GEMINI) RESMİ SDK BAĞLANTISI
+// ==========================================
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -188,7 +195,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (V1 API GEMINI SOHBET MOTORU)
+// MESAJ DİNLEME (RESMİ SDK İLE GEMINI SOHBET)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -253,7 +260,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- GERÇEK GEMINI V1 REST API İLE SOHBET ---
+    // --- RESMİ SDK İLE GEMINI SOHBETİ ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -261,8 +268,7 @@ client.on('messageCreate', async message => {
         const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
         if (prompt.length === 0) return;
 
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
+        if (!aiModel) {
             return message.reply({ content: "Kanka API key eksik (Render env ayarlarını kontrol et)." }).catch(() => {});
         }
 
@@ -271,32 +277,15 @@ client.on('messageCreate', async message => {
 
             const fullPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
 
-            // DÜZELTİLDİ: v1beta yerine v1 sürüm endpoint'i kullanıldı
-            const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: fullPrompt }] }]
-                })
-            });
+            const result = await aiModel.generateContent(fullPrompt);
+            const response = await result.response;
+            const text = response.text();
 
-            const data = await apiRes.json();
-
-            if (!apiRes.ok) {
-                console.error("Gemini API Hatası:", data);
-                return message.reply({ content: `Kanka API hata verdi: ${data.error?.message || 'Bilinmeyen hata'}` }).catch(() => {});
-            }
-
-            if (data && data.candidates && data.candidates[0] && data.candidates[0].content) {
-                const replyText = data.candidates[0].content.parts[0].text;
-                const safeReply = replyText.length > 1950 ? replyText.substring(0, 1950) + '...' : replyText;
-                return message.reply({ content: safeReply }).catch(() => {});
-            } else {
-                return message.reply({ content: "Kanka Google boş döndü, bi daha yaz." }).catch(() => {});
-            }
+            const safeReply = text.length > 1950 ? text.substring(0, 1950) + '...' : text;
+            return message.reply({ content: safeReply }).catch(() => {});
         } catch (err) {
-            console.error("Fetch Hatası:", err);
-            return message.reply({ content: "Kanka anlık bir bağlantı hatası oldu, tekrar yaz." }).catch(() => {});
+            console.error("Gemini SDK Hatası:", err);
+            return message.reply({ content: `Kanka API hata verdi: ${err.message}` }).catch(() => {});
         }
     }
 
