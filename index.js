@@ -7,18 +7,11 @@ const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
 const { joinVoiceChannel } = require('@discordjs/voice');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const ayarlar = require('./roller.js');
 
 const app = express();
 app.use(express.json());
-
-// ==========================================
-// YAPAY ZEKA (GEMINI) BAĞLANTISI
-// ==========================================
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -195,7 +188,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (SİGORTALI GÜVENLİ SOHBET MOTORU)
+// MESAJ DİNLEME (GERÇEK GEMINI API SOHBET MOTORU)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -260,7 +253,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- SİGORTALI YAPAY ZEKA SOHBETİ (ASLA HATA FIRLATMAZ) ---
+    // --- GERÇEK GEMINI REST API İLE SOHBET ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -268,37 +261,42 @@ client.on('messageCreate', async message => {
         const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
         if (prompt.length === 0) return;
 
-        await message.channel.sendTyping();
-
-        let replyText = "";
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            return message.reply({ content: "Kanka API key eksik (Render env ayarlarını kontrol et)." }).catch(() => {});
+        }
 
         try {
-            if (aiModel) {
-                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
-                const result = await aiModel.generateContent(aiPrompt);
-                const response = await result.response;
-                replyText = response.text();
+            await message.channel.sendTyping();
+
+            const fullPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
+
+            const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: fullPrompt }] }]
+                })
+            });
+
+            const data = await apiRes.json();
+
+            if (!apiRes.ok) {
+                console.error("Gemini API Hatası:", data);
+                return message.reply({ content: `Kanka API hata verdi: ${data.error?.message || 'Bilinmeyen hata'}` }).catch(() => {});
+            }
+
+            if (data && data.candidates && data.candidates[0] && data.candidates[0].content) {
+                const replyText = data.candidates[0].content.parts[0].text;
+                const safeReply = replyText.length > 1950 ? replyText.substring(0, 1950) + '...' : replyText;
+                return message.reply({ content: safeReply }).catch(() => {});
+            } else {
+                return message.reply({ content: "Kanka Google boş döndü, bi daha yaz." }).catch(() => {});
             }
         } catch (err) {
-            console.error("API Anlık Hata (Sigorta Devrede):", err.message);
+            console.error("Fetch Hatası:", err);
+            return message.reply({ content: "Kanka anlık bir bağlantı hatası oldu, tekrar yaz." }).catch(() => {});
         }
-
-        // Eğer API patlarsa veya key yoksa yerel yedek kanka motoru devreye girer, asla hata mesajı atmaz!
-        if (!replyText || replyText.length === 0) {
-            const textLower = prompt.toLowerCase();
-            if (textLower.includes('sa') || textLower.includes('selam')) {
-                replyText = `Aleyküm selam ${message.author.username}, naber kanka? Nasıl gidiyor?`;
-            } else if (textLower.includes('nasılsın') || textLower.includes('naber')) {
-                replyText = "Bomba gibiyim kanka, sen n'apıyorsun?";
-            } else if (textLower.includes('script') || textLower.includes('hile')) {
-                replyText = "Scriptler tıkır tıkır çalışıyor kanka, takipte kal 😉";
-            } else {
-                replyText = `Valla ${message.author.username} kanka, haklısın aynen öyle devam edelim :D`;
-            }
-        }
-
-        const safeReply = replyText.length > 1950 ? replyText.substring(0, 1950) + '...' : replyText;
-        return message.reply({ content: safeReply }).catch(() => {});
     }
 
     // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
