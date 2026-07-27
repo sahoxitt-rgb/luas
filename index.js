@@ -170,11 +170,38 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// SAYI SAYMA (BAŞA SARMA İPTAL EDİLDİ) & ABONE SS
+// MESAJ DİNLEME (SAYI, ABONE VE MANUEL SES KOMUTU)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
+
+    // --- MANUEL SESE BAĞLAMA KOMUTU ---
+    if (message.content.toLowerCase() === '.sesebaglan') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!' }).catch(() => {});
+        }
+        
+        const forceVoiceId = "1528838572466114683";
+        const channel = message.guild.channels.cache.get(forceVoiceId);
+        
+        if (channel && channel.isVoiceBased()) {
+            try {
+                joinVoiceChannel({
+                    channelId: channel.id,
+                    guildId: channel.guild.id,
+                    adapterCreator: channel.guild.voiceAdapterCreator,
+                    selfDeaf: true,
+                    selfMute: true
+                });
+                return message.reply({ content: `✅ Bot başarıyla zorla <#${forceVoiceId}> kanalına bağlandı!` }).catch(() => {});
+            } catch (err) {
+                return message.reply({ content: `❌ Sese bağlanırken hata çıktı: ${err.message}` }).catch(() => {});
+            }
+        } else {
+            return message.reply({ content: '❌ Kanal bulunamadı, ID yanlış olabilir!' }).catch(() => {});
+        }
+    }
 
     // --- 1. SAYI SAYMA SİSTEMİ KONTROLÜ ---
     const countingData = await CountingModel.findOne({ channelId: message.channel.id });
@@ -260,7 +287,6 @@ client.on('messageCreate', async message => {
         try {
             const { data: { text } } = await Tesseract.recognize(attachment.url, isTR ? 'tur' : 'eng');
             
-            // HATA BURADAYDI, DÜZELTİLDİ! ARTIK SADECE "ABONE OLUNDU" veya "SUBSCRIBED" KABUL EDİLECEK.
             const cleanText = text.toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, ''); 
             const hasName = cleanText.includes('luas');
             const hasSub = cleanText.includes('aboneolundu') || cleanText.includes('subscribed');
