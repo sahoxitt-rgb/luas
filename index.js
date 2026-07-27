@@ -6,12 +6,19 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
-const { joinVoiceChannel } = require('@discordjs/voice');
+const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
+const { GoogleGenerativeAI } = require('@google/generative-ai'); // Yapay Zeka Kütüphanesi
 
 const ayarlar = require('./roller.js');
 
 const app = express();
 app.use(express.json());
+
+// ==========================================
+// YAPAY ZEKA (GEMINI) BAĞLANTISI
+// ==========================================
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -155,11 +162,10 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
     // 2. Rol Güncelleme Logu (Ekleme / Çıkarma)
     if (oldMember.roles.cache.size !== newMember.roles.cache.size) {
-        const roleLogChannelId = "1531264336625012927"; // Yeni eklenen Rol Log kanalı
+        const roleLogChannelId = "1531264336625012927"; // Rol Log kanalı
         const roleLogChannel = newMember.guild.channels.cache.get(roleLogChannelId);
         
         if (roleLogChannel) {
-            // Hangi roller eklendi, hangileri çıkarıldı buluyoruz
             const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
             const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
             
@@ -173,7 +179,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
             }
             
             const roleEmbed = new EmbedBuilder()
-                .setColor('#FFA500') // Turuncu uyarı rengi
+                .setColor('#FFA500') 
                 .setTitle('🛠️ Üye Rolleri Güncellendi')
                 .setDescription(desc)
                 .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
@@ -201,23 +207,88 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (SELAM, SAYI, ABONE VE SES)
+// MESAJ DİNLEME (SOHBET, SELAM, YENİ SES KOMUTLARI, SAYI, ABONE)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
+
+    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) ---
+    if (message.mentions.has(client.user)) {
+        if (!aiModel) return message.reply({ content: "Kanka beynimi takmayı unutmuşsun (API Key eksik)." }).catch(() => {});
+
+        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+
+        if (prompt.length > 0) {
+            try {
+                await message.channel.sendTyping();
+                
+                // Botun kişiliği
+                const aiPrompt = `Senin adın Luas Bot. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
+
+                const result = await aiModel.generateContent(aiPrompt);
+                const response = result.response.text();
+
+                const safeResponse = response.length > 1950 ? response.substring(0, 1950) + '...' : response;
+                return message.reply({ content: safeResponse }).catch(() => {});
+            } catch (err) {
+                console.error("Yapay Zeka Hatası:", err);
+                return message.reply({ content: "Kanka beynim yandı, az sonra tekrar yaz..." }).catch(() => {});
+            }
+        }
+    }
 
     // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
     const exactGreetings = ["sa", "s.a", "sea", "slm", "selam"];
     const includesGreetings = ["selamun aleyküm", "selamun aleykum", "selamın aleyküm", "selamın aleykum", "selam aleykum", "selam aleyküm"];
     const msgLower = message.content.toLowerCase().trim();
 
-    // Eğer mesajda selam kelimeleri tam uyuyorsa (veya içinde selamun aleyküm geçiyorsa)
     if (exactGreetings.includes(msgLower) || includesGreetings.some(g => msgLower.includes(g))) {
         message.reply({ content: `Aleyküm Selam <@${message.author.id}>, Nasılsın?` }).catch(() => {});
     }
 
-    // --- MANUEL SESE BAĞLAMA KOMUTU ---
+    // --- YENİ SES KONTROL KOMUTLARI (.aikur / .aikaldır) ---
+    if (message.content.toLowerCase() === '.aikur') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!' }).catch(() => {});
+        }
+        
+        const voiceChannel = message.member.voice.channel;
+        
+        if (!voiceChannel) {
+            return message.reply({ content: '❌ Kanka önce bir ses kanalına girmelisin ki senin yanına geleyim!' }).catch(() => {});
+        }
+        
+        try {
+            joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: message.guild.id,
+                adapterCreator: message.guild.voiceAdapterCreator,
+                selfDeaf: true,
+                selfMute: true
+            });
+            return message.reply({ content: `✅ Bot başarıyla <#${voiceChannel.id}> kanalına kuruldu!` }).catch(() => {});
+        } catch (err) {
+            return message.reply({ content: `❌ Sese bağlanırken hata çıktı: ${err.message}` }).catch(() => {});
+        }
+    }
+
+    if (message.content.toLowerCase() === '.aikaldir' || message.content.toLowerCase() === '.aikaldır') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!' }).catch(() => {});
+        }
+        
+        const connection = getVoiceConnection(message.guild.id);
+        
+        if (connection) {
+            connection.destroy();
+            return message.reply({ content: `✅ Bot sesten başarıyla ayrıldı!` }).catch(() => {});
+        } else {
+            return message.reply({ content: `❌ Zaten herhangi bir ses kanalında değilim ki!` }).catch(() => {});
+        }
+    }
+
+    // --- ESKİ SABİT KANALA SESE BAĞLAMA KOMUTU (.sesebaglan) ---
     if (message.content.toLowerCase() === '.sesebaglan') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!' }).catch(() => {});
