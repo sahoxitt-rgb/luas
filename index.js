@@ -18,7 +18,8 @@ app.use(express.json());
 // YAPAY ZEKA (GEMINI) BAĞLANTISI
 // ==========================================
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-3.6-flash" }) : null;
+// %100 Uyumlu olan "gemini-pro" modeline geçildi (Beyin yanma sorunu çözüldü)
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -288,7 +289,7 @@ client.on('messageCreate', async message => {
                 
                 const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Karakterin: Ne çok ciddi ne de çok cıvık. Normal ile eğlenceli arasında, samimi ve yardımsever birisin. Asla yapay zeka olduğunu söyleme, gerçek bir insan (kanka) gibi davran. Cümlelerin çok uzun olmasın, akıcı olsun.
 
-Aşağıda bu kanaldaki son konuşmaların geçmişi var. Bu geçmişi oku, konunun ne olduğunu hatırla ve en son mesaja uygun bir cevap ver. Konuşmada argo vs. geçse de sen sakin kalıp ortama uyarak cevap ver.
+Aşağıda bu kanaldaki son konuşmaların geçmişi var. Bu geçmişi oku, konunun ne olduğunu hatırla ve en son mesaja uygun bir cevap ver. Konuşmada argo vs. geçse de sen sakin kalıp ortama uyarak cevap ver. Eğer kullanıcı seninle İngilizce konuşursa ona İngilizce cevap ver.
 
 Konuşma Geçmişi:
 ${historyPrompt}
@@ -522,7 +523,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        // --- YENİ ADAMA AKILLI BEDAVA KEY SİSTEMİ ---
+        // --- GÜNCELLENMİŞ BEDAVA KEY DM SİSTEMİ (TR & EN) ---
         if (customId === 'get_free_key' || customId === 'get_free_key_en') {
             await interaction.deferReply({ ephemeral: true });
             const isTR = customId === 'get_free_key';
@@ -535,9 +536,15 @@ client.on('interactionCreate', async interaction => {
                         .setColor('#FF0000')
                         .setTitle(isTR ? '⚠️ Zaten Hesabın Var!' : '⚠️ You Already Have an Account!')
                         .setDescription(isTR 
-                            ? `Zaten daha önce bir bedava hesap oluşturmuşsun!\n\n👤 **Kullanıcı Adın:** \`${existingUser.username}\`\n🔑 **Key'in:** \`${existingUser.password}\`` 
-                            : `You have already generated a free account!\n\n👤 **Username:** \`${existingUser.username}\`\n🔑 **Key:** \`${existingUser.password}\``);
-                    return interaction.editReply({ embeds: [embed] });
+                            ? `Zaten daha önce bir bedava hesap oluşturmuşsun!\n\n👤 **Kullanıcı Adın:** \`${existingUser.username}\`\n🔑 **Key'in:** \`${existingUser.password}\`\n🆔 **Key ID:** \`${existingUser.keyId}\`` 
+                            : `You have already generated a free account!\n\n👤 **Username:** \`${existingUser.username}\`\n🔑 **Key:** \`${existingUser.password}\`\n🆔 **Key ID:** \`${existingUser.keyId}\``);
+                    
+                    try {
+                        await interaction.user.send({ embeds: [embed] });
+                        return interaction.editReply({ content: isTR ? "✅ Bilgilerin DM kutuna tekrar gönderildi!" : "✅ Your credentials have been sent to your DMs again!" });
+                    } catch (err) {
+                        return interaction.editReply({ content: isTR ? "❌ DM kutun kapalı! Lütfen sunucu üyelerinden direkt mesajlara izin ver." : "❌ Your DMs are closed! Please allow direct messages from server members." });
+                    }
                 }
 
                 // Rastgele Kullanıcı Adı ve Şifre (Key) Üret
@@ -562,17 +569,21 @@ client.on('interactionCreate', async interaction => {
                     .setColor('#00FF00')
                     .setTitle(isTR ? '🎁 Bedava Hesabın Oluşturuldu!' : '🎁 Free Account Generated!')
                     .setDescription(isTR 
-                        ? `🎉 Script'e giriş yapabilmen için bilgilerin başarıyla oluşturuldu!\n\n👤 **Kullanıcı Adı:** \`${generatedUsername}\`\n🔑 **Key (Şifre):** \`${generatedKey}\`\n\n*(Lütfen bu bilgileri kimseyle paylaşma!)*` 
-                        : `🎉 Your login credentials have been successfully generated!\n\n👤 **Username:** \`${generatedUsername}\`\n🔑 **Key (Password):** \`${generatedKey}\`\n\n*(Please do not share this information!)*`);
+                        ? `🎉 Script'e giriş yapabilmen için bilgilerin başarıyla oluşturuldu!\n\n👤 **Kullanıcı Adı:** \`${generatedUsername}\`\n🔑 **Key (Şifre):** \`${generatedKey}\`\n🆔 **Key ID:** \`${uniqueKeyId}\`\n\n*(Lütfen bu bilgileri kimseyle paylaşma!)*` 
+                        : `🎉 Your login credentials have been successfully generated!\n\n👤 **Username:** \`${generatedUsername}\`\n🔑 **Key (Password):** \`${generatedKey}\`\n🆔 **Key ID:** \`${uniqueKeyId}\`\n\n*(Please do not share this information!)*`);
                 
-                await interaction.editReply({ embeds: [successEmbed] });
+                try {
+                    await interaction.user.send({ embeds: [successEmbed] });
+                    await interaction.editReply({ content: isTR ? "✅ Hesap bilgilerin özelden (DM) gönderildi kanka, mesajlarını kontrol et!" : "✅ Your account details have been sent via DM, check your messages!" });
+                } catch (err) {
+                    await interaction.editReply({ content: isTR ? "❌ DM kutun kapalı! Bilgilerini atamıyorum. Gizlilik ayarlarından DM'leri açmalısın." : "❌ Your DMs are closed! I cannot send your details. Please open DMs in privacy settings." });
+                }
             } catch (err) {
                 await interaction.editReply({ content: '❌ Veritabanı hatası oluştu, lütfen yetkiliye bildirin.' });
             }
             return;
         }
 
-        // --- DİĞER BUTON İŞLEMLERİ ---
         if (customId === 'verify_tr' || customId === 'verify_en') {
             await interaction.deferReply({ ephemeral: true });
             
@@ -780,8 +791,6 @@ client.on('interactionCreate', async interaction => {
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
                 const newUser = new UserModel({ username, password, keyId: uniqueKeyId, plan: "premium", duration, discordId: interaction.user.id, creatorTag: interaction.user.tag });
                 await newUser.save();
-                
-                // Adminin de kafası karışmasın, "Kullanıcı Adı" diye kocaman yazdım
                 const replyEmbed = new EmbedBuilder().setColor('#FFD700').setTitle('💎 Özel Hesap (Key) Oluşturuldu').setDescription(`🚀 **Giriş Bilgileri Hazır!**\n\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key (Şifre):** \`${password}\`\n🆔 **Benzersiz ID:** \`${uniqueKeyId}\``);
                 
                 const logChannelId = process.env.LOG_CHANNEL_ID;
