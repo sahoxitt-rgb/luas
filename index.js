@@ -6,8 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
-const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); // Yapay Zeka Kütüphanesi
+const { joinVoiceChannel } = require('@discordjs/voice');
+const { GoogleGenerativeAI } = require('@google/generative-ai'); 
 
 const ayarlar = require('./roller.js');
 
@@ -35,7 +35,8 @@ const UserModel = mongoose.model('User', UserSchema);
 const TicketSchema = new mongoose.Schema({ id: { type: String, default: "ticket" }, count: { type: Number, default: 0 } });
 const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
-const ConfigSchema = new mongoose.Schema({ id: { type: String, default: "config" }, tr_ss_channel: { type: String, default: null }, en_ss_channel: { type: String, default: null } });
+// ai_channel eklendi!
+const ConfigSchema = new mongoose.Schema({ id: { type: String, default: "config" }, tr_ss_channel: { type: String, default: null }, en_ss_channel: { type: String, default: null }, ai_channel: { type: String, default: null } });
 const ConfigModel = mongoose.model('Config', ConfigSchema);
 
 const CountingSchema = new mongoose.Schema({ guildId: String, channelId: String, language: String, currentCount: { type: Number, default: 0 }, lastUserId: { type: String, default: null } });
@@ -132,10 +133,9 @@ process.on('unhandledRejection', async (error) => await sendErrorLog(error.stack
 process.on('uncaughtException', async (error) => await sendErrorLog(error.stack || error.message || String(error)));
 
 // ==========================================
-// BOOST DEDEKTÖRÜ VE ROL LOG (YENİ)
+// BOOST DEDEKTÖRÜ VE ROL LOG
 // ==========================================
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
-    // 1. Boost Logu
     if (!oldMember.premiumSince && newMember.premiumSince) {
         const boostRolId = "1531013766945308863"; 
         const boostRol = newMember.guild.roles.cache.get(boostRolId);
@@ -160,9 +160,8 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         }
     }
 
-    // 2. Rol Güncelleme Logu (Ekleme / Çıkarma)
     if (oldMember.roles.cache.size !== newMember.roles.cache.size) {
-        const roleLogChannelId = "1531264336625012927"; // Rol Log kanalı
+        const roleLogChannelId = "1531264336625012927"; 
         const roleLogChannel = newMember.guild.channels.cache.get(roleLogChannelId);
         
         if (roleLogChannel) {
@@ -171,20 +170,10 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
             
             let desc = `👤 **Kullanıcı:** <@${newMember.id}> (\`${newMember.user.tag}\`)\n\n`;
             
-            if (addedRoles.size > 0) {
-                desc += `✅ **Eklenen Rol(ler):** ${addedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
-            }
-            if (removedRoles.size > 0) {
-                desc += `❌ **Alınan Rol(ler):** ${removedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
-            }
+            if (addedRoles.size > 0) desc += `✅ **Eklenen Rol(ler):** ${addedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
+            if (removedRoles.size > 0) desc += `❌ **Alınan Rol(ler):** ${removedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
             
-            const roleEmbed = new EmbedBuilder()
-                .setColor('#FFA500') 
-                .setTitle('🛠️ Üye Rolleri Güncellendi')
-                .setDescription(desc)
-                .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
-                .setTimestamp();
-                
+            const roleEmbed = new EmbedBuilder().setColor('#FFA500').setTitle('🛠️ Üye Rolleri Güncellendi').setDescription(desc).setThumbnail(newMember.user.displayAvatarURL({ dynamic: true })).setTimestamp();
             await roleLogChannel.send({ embeds: [roleEmbed] }).catch(() => {});
         }
     }
@@ -207,70 +196,28 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (SOHBET, SELAM, YENİ SES KOMUTLARI, SAYI, ABONE)
+// MESAJ DİNLEME (SOHBET, KOMUTLAR, SAYI, ABONE)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) ---
-    if (message.mentions.has(client.user)) {
-        if (!aiModel) return message.reply({ content: "Kanka beynimi takmayı unutmuşsun (API Key eksik)." }).catch(() => {});
-
-        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
-
-        if (prompt.length > 0) {
-            try {
-                await message.channel.sendTyping();
-                
-                // Botun kişiliği
-                const aiPrompt = `Senin adın Luas Bot. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
-
-                const result = await aiModel.generateContent(aiPrompt);
-                const response = result.response.text();
-
-                const safeResponse = response.length > 1950 ? response.substring(0, 1950) + '...' : response;
-                return message.reply({ content: safeResponse }).catch(() => {});
-            } catch (err) {
-                console.error("Yapay Zeka Hatası:", err);
-                return message.reply({ content: "Kanka beynim yandı, az sonra tekrar yaz..." }).catch(() => {});
-            }
-        }
+    let config = await ConfigModel.findOne({ id: "config" });
+    if (!config) {
+        config = new ConfigModel({ id: "config" });
+        await config.save();
     }
 
-    // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
-    const exactGreetings = ["sa", "s.a", "sea", "slm", "selam"];
-    const includesGreetings = ["selamun aleyküm", "selamun aleykum", "selamın aleyküm", "selamın aleykum", "selam aleykum", "selam aleyküm"];
-    const msgLower = message.content.toLowerCase().trim();
-
-    if (exactGreetings.includes(msgLower) || includesGreetings.some(g => msgLower.includes(g))) {
-        message.reply({ content: `Aleyküm Selam <@${message.author.id}>, Nasılsın?` }).catch(() => {});
-    }
-
-    // --- YENİ SES KONTROL KOMUTLARI (.aikur / .aikaldır) ---
+    // --- YAPAY ZEKA KANALI KURMA / KALDIRMA ---
     if (message.content.toLowerCase() === '.aikur') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!' }).catch(() => {});
         }
         
-        const voiceChannel = message.member.voice.channel;
+        config.ai_channel = message.channel.id;
+        await config.save();
         
-        if (!voiceChannel) {
-            return message.reply({ content: '❌ Kanka önce bir ses kanalına girmelisin ki senin yanına geleyim!' }).catch(() => {});
-        }
-        
-        try {
-            joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId: message.guild.id,
-                adapterCreator: message.guild.voiceAdapterCreator,
-                selfDeaf: true,
-                selfMute: true
-            });
-            return message.reply({ content: `✅ Bot başarıyla <#${voiceChannel.id}> kanalına kuruldu!` }).catch(() => {});
-        } catch (err) {
-            return message.reply({ content: `❌ Sese bağlanırken hata çıktı: ${err.message}` }).catch(() => {});
-        }
+        return message.reply({ content: `✅ Tamamdır kanka! Artık <#${message.channel.id}> kanalını sohbet mekanı belledim. Yazılan her şeye cevap vereceğim!` }).catch(() => {});
     }
 
     if (message.content.toLowerCase() === '.aikaldir' || message.content.toLowerCase() === '.aikaldır') {
@@ -278,17 +225,16 @@ client.on('messageCreate', async message => {
             return message.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!' }).catch(() => {});
         }
         
-        const connection = getVoiceConnection(message.guild.id);
-        
-        if (connection) {
-            connection.destroy();
-            return message.reply({ content: `✅ Bot sesten başarıyla ayrıldı!` }).catch(() => {});
+        if (config.ai_channel === message.channel.id) {
+            config.ai_channel = null;
+            await config.save();
+            return message.reply({ content: `✅ Yapay zeka sohbeti bu kanaldan kaldırıldı kanka, sustum!` }).catch(() => {});
         } else {
-            return message.reply({ content: `❌ Zaten herhangi bir ses kanalında değilim ki!` }).catch(() => {});
+            return message.reply({ content: `❌ Kanka burası zaten yapay zeka kanalı değil ki!` }).catch(() => {});
         }
     }
 
-    // --- ESKİ SABİT KANALA SESE BAĞLAMA KOMUTU (.sesebaglan) ---
+    // --- SABİT SES KANALINA BAĞLANMA (.sesebaglan) ---
     if (message.content.toLowerCase() === '.sesebaglan') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!' }).catch(() => {});
@@ -313,6 +259,45 @@ client.on('messageCreate', async message => {
         } else {
             return message.reply({ content: '❌ Kanal bulunamadı, ID yanlış olabilir!' }).catch(() => {});
         }
+    }
+
+    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) ---
+    const isAiChannel = (config.ai_channel === message.channel.id);
+    const isMentioned = message.mentions.has(client.user);
+
+    // Eğer AI kanalıysa VEYA bot etiketlendiyse (ve mesaj bir komut değilse) cevap ver.
+    if ((isAiChannel || isMentioned) && !message.content.startsWith('.')) {
+        if (!aiModel) return message.reply({ content: "Kanka beynimi takmayı unutmuşsun (API Key eksik)." }).catch(() => {});
+
+        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+
+        if (prompt.length > 0) {
+            try {
+                await message.channel.sendTyping();
+                
+                // Botun kişiliği
+                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka veya bot olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
+
+                const result = await aiModel.generateContent(aiPrompt);
+                const response = result.response.text();
+
+                const safeResponse = response.length > 1950 ? response.substring(0, 1950) + '...' : response;
+                return message.reply({ content: safeResponse }).catch(() => {});
+            } catch (err) {
+                console.error("Yapay Zeka Hatası:", err);
+                return message.reply({ content: "Kanka beynim yandı, az sonra tekrar yaz..." }).catch(() => {});
+            }
+        }
+        return; // Yapay zeka cevap verdiyse mesajı başka işlemlere (sayı sayma vs.) sokma
+    }
+
+    // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
+    const exactGreetings = ["sa", "s.a", "sea", "slm", "selam"];
+    const includesGreetings = ["selamun aleyküm", "selamun aleykum", "selamın aleyküm", "selamın aleykum", "selam aleykum", "selam aleyküm"];
+    const msgLower = message.content.toLowerCase().trim();
+
+    if (exactGreetings.includes(msgLower) || includesGreetings.some(g => msgLower.includes(g))) {
+        message.reply({ content: `Aleyküm Selam <@${message.author.id}>, Nasılsın?` }).catch(() => {});
     }
 
     // --- 1. SAYI SAYMA SİSTEMİ KONTROLÜ ---
@@ -359,9 +344,6 @@ client.on('messageCreate', async message => {
     }
 
     // --- 2. ABONE SS KONTROLÜ (YAPAY ZEKA) ---
-    const config = await ConfigModel.findOne({ id: "config" });
-    if (!config) return;
-
     const tr_kanal = "1530995336229945426";
     const en_kanal = "1530996048254734499";
 
