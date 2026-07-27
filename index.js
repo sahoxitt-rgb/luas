@@ -15,10 +15,10 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// YAPAY ZEKA (GEMINI) RESMİ SDK BAĞLANTISI
+// YAPAY ZEKA (GEMINI) - EVRENSEL HATASIZ MODEL
 // ==========================================
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -195,7 +195,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (RESMİ SDK İLE GEMINI SOHBET)
+// MESAJ DİNLEME (GEMINI-PRO SOHBET MOTORU)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -260,7 +260,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- RESMİ SDK İLE GEMINI SOHBETİ ---
+    // --- GEMINI-PRO SOHBETİ ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
