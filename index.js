@@ -68,12 +68,20 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+client.textCommands = new Collection(); // Nokta komutları için koleksiyon
+
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 const commandArray = [];
 for (const file of commandFiles) {
     const command = require(path.join(commandsPath, file));
-    if ('data' in command && 'execute' in command) { client.commands.set(command.data.name, command); commandArray.push(command.data.toJSON()); }
+    if ('data' in command && 'execute' in command) { 
+        client.commands.set(command.data.name, command); 
+        commandArray.push(command.data.toJSON()); 
+    }
+    if ('name' in command && 'executeText' in command) {
+        client.textCommands.set(command.name, command);
+    }
 }
 
 client.once('clientReady', async () => {
@@ -195,7 +203,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (SİGORTALI API SOHBET MOTORU)
+// MESAJ DİNLEME (SOHBET, NOKTA KOMUTLARI, SAYI, ABONE)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -205,6 +213,21 @@ client.on('messageCreate', async message => {
     if (!config) {
         config = new ConfigModel({ id: "config" });
         await config.save();
+    }
+
+    // --- NOKTA KOMUTLARI YÖNETİCİSİ (.duyuru vb.) ---
+    if (message.content.startsWith('.')) {
+        const args = message.content.slice(1).trim().split(/ +/);
+        const commandName = args.shift().toLowerCase();
+        const command = client.textCommands.get(commandName);
+        if (command) {
+            try {
+                await command.executeText(message, args, UserModel, TicketModel, ConfigModel, CountingModel);
+            } catch (error) {
+                console.error("Text Command Error:", error);
+            }
+            return;
+        }
     }
 
     // --- YAPAY ZEKA KANALI KURMA / KALDIRMA ---
@@ -282,7 +305,6 @@ client.on('messageCreate', async message => {
             console.error("Gemini API Geçici Hata (Yedek Kanka Motoru Devrede):", err.message);
         }
 
-        // Eğer Google API 404 patlatırsa veya boş dönerse yedek motor anında devreye girer, chat asla bozulmaz!
         if (!replyText || replyText.length === 0) {
             const textLower = prompt.toLowerCase();
             if (textLower.includes('sa') || textLower.includes('selam')) {
@@ -472,7 +494,7 @@ client.on('guildMemberRemove', async member => {
     if (leaveChannelId) {
         const channel = member.guild.channels.cache.get(leaveChannelId);
         if (channel) {
-            const leaveEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('📤 Sunucudan Üye Ayrıldı (Leave)').setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })).setFooter({ text: 'Luas • Çıkış Sistemi' }).setTimestamp();
+            const leaveEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('📤 Sunucudan Üye Ayrıldı (Leave)').setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })) .setFooter({ text: 'Luas • Çıkış Sistemi' }).setTimestamp();
             await channel.send({ embeds: [leaveEmbed] }).catch(() => {});
         }
     }
