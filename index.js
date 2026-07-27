@@ -181,7 +181,7 @@ client.on('messageCreate', async message => {
     if (countingData) {
         const isTR = countingData.language === 'tr';
         const number = parseInt(message.content);
-        const expectedNumber = countingData.currentCount + 1; // Beklenen sayıyı baştan hesapladık
+        const expectedNumber = countingData.currentCount + 1; 
 
         if (isNaN(number)) {
             await message.react('❌');
@@ -260,9 +260,10 @@ client.on('messageCreate', async message => {
         try {
             const { data: { text } } = await Tesseract.recognize(attachment.url, isTR ? 'tur' : 'eng');
             
+            // HATA BURADAYDI, DÜZELTİLDİ! ARTIK SADECE "ABONE OLUNDU" veya "SUBSCRIBED" KABUL EDİLECEK.
             const cleanText = text.toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, ''); 
             const hasName = cleanText.includes('luas');
-            const hasSub = cleanText.includes('abone') || cleanText.includes('sub');
+            const hasSub = cleanText.includes('aboneolundu') || cleanText.includes('subscribed');
 
             const logChannel = message.guild.channels.cache.get(ayarlar.ABONE_LOG_KANAL_ID);
             const joinedTimestamp = Math.floor(message.member.joinedTimestamp / 1000);
