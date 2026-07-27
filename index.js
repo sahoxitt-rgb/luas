@@ -15,10 +15,10 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// YAPAY ZEKA (GEMINI) GERÇEK API BAĞLANTISI
+// YAPAY ZEKA (GEMINI) - İLK ÇALIŞAN ORİJİNAL MODEL
 // ==========================================
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-3.6-flash" }) : null;
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -179,7 +179,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 });
 
 // ==========================================
-// SİLİNEN MESAJ LOGu
+// SİLİNEN MESAJ LOGU
 // ==========================================
 client.on('messageDelete', async message => {
     if (!message.author || message.author.bot) return;
@@ -195,7 +195,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (GERÇEK GEMINI API SOHBET)
+// MESAJ DİNLEME (ORİJİNAL GEMINI 1.5 FLASH SOHBET)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -260,7 +260,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- GERÇEK GEMINI API İLE SOHBET ---
+    // --- ORİJİNAL GERÇEK GEMINI API İLE SOHBET ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -269,15 +269,15 @@ client.on('messageCreate', async message => {
         if (prompt.length === 0) return;
 
         if (!aiModel) {
-            return message.reply({ content: "Kanka API key eksik." }).catch(() => {});
+            return message.reply({ content: "Kanka beynim eksik (API Key tanımlı değil)." }).catch(() => {});
         }
 
         try {
             await message.channel.sendTyping();
 
-            const fullPrompt = `Senin adın Luas Bot. Discord'daki bir yazılım ve script sunucusunun samimi kankasısın. Karakterin: Ne çok resmi ne de aşırı cıvık; normal ile eğlenceli arasında, samimi ve doğal bir kanka dili. Asla bot olduğunu belli etme. Kullanıcının şu mesajına kısa, net ve doğal bir cevap ver: ${prompt}`;
+            const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
 
-            const result = await aiModel.generateContent(fullPrompt);
+            const result = await aiModel.generateContent(aiPrompt);
             const response = await result.response;
             const text = response.text();
 
@@ -285,7 +285,7 @@ client.on('messageCreate', async message => {
             return message.reply({ content: safeReply }).catch(() => {});
         } catch (err) {
             console.error("Gemini API Hatası:", err);
-            return message.reply({ content: "Kanka anlık bir API hatası oldu, tekrar yazarsan duyacağım." }).catch(() => {});
+            return message.reply({ content: "Kanka beynim yandı, az sonra tekrar yaz..." }).catch(() => {});
         }
     }
 
@@ -720,7 +720,7 @@ client.on('interactionCreate', async interaction => {
             const reason = interaction.fields.getTextInputValue('ticketReason'); 
             let prefix = "destek"; let baslik = "🛠️ Destek Bileti";
             if (categoryValue === "satin_alim") { prefix = "satınalım"; baslik = "🛒 Satın Alım Bileti"; }
-            else if (categoryValue === "is_birligi") { prefix = "işbirliği"; baslink = "🤝 İş Birliği Bileti"; }
+            else if (categoryValue === "is_birligi") { prefix = "işbirliği"; baslik = "🤝 İş Birliği Bileti"; }
 
             try {
                 let counter = await TicketModel.findOne({ id: "ticket" });
