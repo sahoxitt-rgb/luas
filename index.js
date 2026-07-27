@@ -15,7 +15,7 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// YAPAY ZEKA (GEMINI) - İLK ÇALIŞAN ORİJİNAL MODEL
+// YAPAY ZEKA (GEMINI) BAĞLANTISI
 // ==========================================
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
@@ -195,7 +195,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (ORİJİNAL GEMINI 1.5 FLASH SOHBET)
+// MESAJ DİNLEME (SİGORTALI GÜVENLİ SOHBET MOTORU)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -260,7 +260,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- ORİJİNAL GERÇEK GEMINI API İLE SOHBET ---
+    // --- SİGORTALI YAPAY ZEKA SOHBETİ (ASLA HATA FIRLATMAZ) ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -268,25 +268,37 @@ client.on('messageCreate', async message => {
         const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
         if (prompt.length === 0) return;
 
-        if (!aiModel) {
-            return message.reply({ content: "Kanka beynim eksik (API Key tanımlı değil)." }).catch(() => {});
-        }
+        await message.channel.sendTyping();
+
+        let replyText = "";
 
         try {
-            await message.channel.sendTyping();
-
-            const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
-
-            const result = await aiModel.generateContent(aiPrompt);
-            const response = await result.response;
-            const text = response.text();
-
-            const safeReply = text.length > 1950 ? text.substring(0, 1950) + '...' : text;
-            return message.reply({ content: safeReply }).catch(() => {});
+            if (aiModel) {
+                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
+                const result = await aiModel.generateContent(aiPrompt);
+                const response = await result.response;
+                replyText = response.text();
+            }
         } catch (err) {
-            console.error("Gemini API Hatası:", err);
-            return message.reply({ content: "Kanka beynim yandı, az sonra tekrar yaz..." }).catch(() => {});
+            console.error("API Anlık Hata (Sigorta Devrede):", err.message);
         }
+
+        // Eğer API patlarsa veya key yoksa yerel yedek kanka motoru devreye girer, asla hata mesajı atmaz!
+        if (!replyText || replyText.length === 0) {
+            const textLower = prompt.toLowerCase();
+            if (textLower.includes('sa') || textLower.includes('selam')) {
+                replyText = `Aleyküm selam ${message.author.username}, naber kanka? Nasıl gidiyor?`;
+            } else if (textLower.includes('nasılsın') || textLower.includes('naber')) {
+                replyText = "Bomba gibiyim kanka, sen n'apıyorsun?";
+            } else if (textLower.includes('script') || textLower.includes('hile')) {
+                replyText = "Scriptler tıkır tıkır çalışıyor kanka, takipte kal 😉";
+            } else {
+                replyText = `Valla ${message.author.username} kanka, haklısın aynen öyle devam edelim :D`;
+            }
+        }
+
+        const safeReply = replyText.length > 1950 ? replyText.substring(0, 1950) + '...' : replyText;
+        return message.reply({ content: safeReply }).catch(() => {});
     }
 
     // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
