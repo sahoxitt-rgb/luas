@@ -18,7 +18,6 @@ app.use(express.json());
 // YAPAY ZEKA (GEMINI) BAĞLANTISI
 // ==========================================
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-// HATA BURADAN KAYNAKLIYDI, YENİ 3.6 SÜRÜMÜNE GÜNCELLENDİ!
 const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-3.6-flash" }) : null;
 
 // ==========================================
@@ -261,7 +260,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) ---
+    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) - HAFIZALI SÜRÜM ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -274,7 +273,27 @@ client.on('messageCreate', async message => {
             try {
                 await message.channel.sendTyping();
                 
-                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka veya bot olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
+                // Botun hafızası için son 8 mesajı çekiyoruz
+                let historyPrompt = "";
+                try {
+                    const messages = await message.channel.messages.fetch({ limit: 8 });
+                    messages.reverse().forEach(m => {
+                        if (!m.content.startsWith('.')) {
+                            const authorName = m.author.id === client.user.id ? "Luas Bot" : m.author.username;
+                            historyPrompt += `${authorName}: ${m.content}\n`;
+                        }
+                    });
+                } catch (e) {
+                    console.error("Geçmiş çekilemedi:", e);
+                }
+                
+                // Güncellenmiş bot kişiliği ve geçmişi içeren yeni prompt
+                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, eğlenceli ama dozunda (çok laubali olmadan, normalle eğlence arası) bir kanka ağzıyla konuşan birisin. Asla bir yapay zeka veya bot olduğunu belli etme, insan gibi davran.
+Aşağıda bu kanaldaki son konuşmaların geçmişi var. Bu geçmişi okuyarak konunun (bağlamın) ne olduğunu anla ve kullanıcının en son yazdığı mesaja mantıklı, akıcı ve çok uzun olmayan bir cevap ver.
+
+Konuşma Geçmişi:
+${historyPrompt}
+(Şimdi buna cevap ver) ${message.author.username}: ${prompt}`;
 
                 const result = await aiModel.generateContent(aiPrompt);
                 const response = result.response.text();
