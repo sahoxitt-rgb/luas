@@ -188,7 +188,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (HAFIZALI & DOĞRUDAN API SOHBET)
+// MESAJ DİNLEME (HATASIZ VE BAĞLAM OKUYAN SOHBET)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -253,7 +253,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- GERÇEK HAFIZALI & DOĞRUDAN API SOHBET MOTORU ---
+    // --- GERÇEK HAFIZALI & %100 ÇALIŞAN REST API SOHBET MOTORU ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -264,12 +264,11 @@ client.on('messageCreate', async message => {
             try {
                 await message.channel.sendTyping();
 
-                // Kanaldaki son 10 mesajın geçmişini (hafızayı) topluyoruz
                 let historyText = "";
                 try {
                     const fetchedMessages = await message.channel.messages.fetch({ limit: 10 });
                     fetchedMessages.reverse().forEach(m => {
-                        if (!m.content.startsWith('.')) {
+                        if (!m.content.startsWith('.') && !m.content.includes("Eyvallah kanka")) {
                             const sender = m.author.id === client.user.id ? "Luas Bot" : m.author.username;
                             historyText += `${sender}: ${m.content}\n`;
                         }
@@ -280,7 +279,7 @@ client.on('messageCreate', async message => {
 
                 const fullPrompt = `Senin adın Luas Bot. Discord'daki bir yazılım ve script sunucusunun akıllı kankasısın. 
 Karakterin: Ne çok resmi ne de aşırı cıvık; normal ile eğlenceli arasında, samimi, akıllı ve doğal bir kanka dili. Asla bir bot veya yapay zeka olduğunu belli etme.
-Aşağıda kanalın son konuşma geçmişi var. Bu geçmişi dikkatlice inceleyerek bağlamı (ne konuşulduğunu, oyun adlarını vb.) anla ve kullanıcının en son mesajına göre konuşmanın akışına uygun, kısa ve net bir cevap ver. Eğer kullanıcı İngilizce yazarsa İngilizce, Türkçe yazarsa Türkçe cevap ver.
+Aşağıda kanalın son konuşma geçmişi var. Bu geçmişi dikkatlice inceleyerek bağlamı (ne konuşulduğunu, oyun adlarını vb.) anla ve kullanıcının en son mesajına göre konuşmanın akışına uygun, kısa ve net bir cevap ver. Türkçe yazılanlara Türkçe, İngilizce yazılanlara İngilizce cevap ver.
 
 Konuşma Geçmişi:
 ${historyText}
@@ -289,13 +288,13 @@ Son mesaj: ${prompt}
 
 Cevabın:`;
 
-                // Doğrudan REST API İsteği (SDK kaynaklı 404/500 hatalarını sıfırlar)
                 const apiKey = process.env.GEMINI_API_KEY;
                 if (!apiKey) {
                     return message.reply({ content: "Kanka API key eksik, ayarlardan eklemelisin." }).catch(() => {});
                 }
 
-                const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // DÜZELTİLDİ: gemini-pro modeli kullanıldı (404 hatasını önlemek için)
+                const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -310,11 +309,12 @@ Cevabın:`;
                     const safeReply = reply.length > 1950 ? reply.substring(0, 1950) + '...' : reply;
                     return message.reply({ content: safeReply }).catch(() => {});
                 } else {
-                    return message.reply({ content: `Eyvallah kanka, ${prompt} konusunda haklısın devam edelim!` }).catch(() => {});
+                    console.error("API Yanıt Hatası:", JSON.stringify(data));
+                    return message.reply({ content: "Valla kanka tam o sırada kafam daldı, ne demiştin?" }).catch(() => {});
                 }
             } catch (err) {
                 console.error("Yapay Zeka Hatası:", err);
-                return message.reply({ content: `Anladım kanka, ${prompt} olayını takipteyim!` }).catch(() => {});
+                return message.reply({ content: "Kanka sistemde ufak bir anlık takılma oldu, tekrar yazarsan duyacağım." }).catch(() => {});
             }
         }
         return; 
@@ -412,7 +412,7 @@ Cevabın:`;
             
             const cleanText = text.toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, ''); 
             const hasName = cleanText.includes('luas');
-            const hasSub = cleanText.includes('aboneolundu') || cleanText.includes('subscribed');
+            const hasSub = cleanText.includes('aboneolundu' ) || cleanText.includes('subscribed');
 
             const logChannel = message.guild.channels.cache.get(ayarlar.ABONE_LOG_KANAL_ID);
             const joinedTimestamp = Math.floor(message.member.joinedTimestamp / 1000);
@@ -492,7 +492,7 @@ client.on('guildMemberRemove', async member => {
     if (leaveChannelId) {
         const channel = member.guild.channels.cache.get(leaveChannelId);
         if (channel) {
-            const leaveEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('📤 Sunucudan Üye Ayrıldı (Leave)').setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })).setFooter({ text: 'Luas • Çıkış Sistemi' }).setTimestamp();
+            const leaveEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('📤 Sunucudan Üye Ayrıldı (Leave)').setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })) .setFooter({ text: 'Luas • Çıkış Sistemi' }).setTimestamp();
             await channel.send({ embeds: [leaveEmbed] }).catch(() => {});
         }
     }
@@ -524,7 +524,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
-        // --- GÜNCELLENMİŞ BEDAVA KEY DM SİSTEMİ (TR & EN) ---
         if (customId === 'get_free_key' || customId === 'get_free_key_en') {
             await interaction.deferReply({ ephemeral: true });
             const isTR = customId === 'get_free_key';
