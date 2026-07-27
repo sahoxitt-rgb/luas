@@ -18,7 +18,8 @@ app.use(express.json());
 // YAPAY ZEKA (GEMINI) BAĞLANTISI
 // ==========================================
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
+// HATA BURADAN KAYNAKLIYDI, YENİ 3.6 SÜRÜMÜNE GÜNCELLENDİ!
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-3.6-flash" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -35,7 +36,6 @@ const UserModel = mongoose.model('User', UserSchema);
 const TicketSchema = new mongoose.Schema({ id: { type: String, default: "ticket" }, count: { type: Number, default: 0 } });
 const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
-// ai_channel eklendi!
 const ConfigSchema = new mongoose.Schema({ id: { type: String, default: "config" }, tr_ss_channel: { type: String, default: null }, en_ss_channel: { type: String, default: null }, ai_channel: { type: String, default: null } });
 const ConfigModel = mongoose.model('Config', ConfigSchema);
 
@@ -265,7 +265,6 @@ client.on('messageCreate', async message => {
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
-    // Eğer AI kanalıysa VEYA bot etiketlendiyse (ve mesaj bir komut değilse) cevap ver.
     if ((isAiChannel || isMentioned) && !message.content.startsWith('.')) {
         if (!aiModel) return message.reply({ content: "Kanka beynimi takmayı unutmuşsun (API Key eksik)." }).catch(() => {});
 
@@ -275,7 +274,6 @@ client.on('messageCreate', async message => {
             try {
                 await message.channel.sendTyping();
                 
-                // Botun kişiliği
                 const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka veya bot olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
 
                 const result = await aiModel.generateContent(aiPrompt);
@@ -288,7 +286,7 @@ client.on('messageCreate', async message => {
                 return message.reply({ content: "Kanka beynim yandı, az sonra tekrar yaz..." }).catch(() => {});
             }
         }
-        return; // Yapay zeka cevap verdiyse mesajı başka işlemlere (sayı sayma vs.) sokma
+        return; 
     }
 
     // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
