@@ -15,10 +15,10 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// YAPAY ZEKA (GEMINI) BAĞLANTISI
+// YAPAY ZEKA (GEMINI) BAĞLANTISI (404 HATASI VERMEYEN SÜRÜM)
 // ==========================================
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -40,6 +40,19 @@ const ConfigModel = mongoose.model('Config', ConfigSchema);
 
 const CountingSchema = new mongoose.Schema({ guildId: String, channelId: String, language: String, currentCount: { type: Number, default: 0 }, lastUserId: { type: String, default: null } });
 const CountingModel = mongoose.model('Counting', CountingSchema);
+
+// ==========================================
+// OWO - EKONOMİ VE ENVANTER ŞEMASI
+// ==========================================
+const OwoSchema = new mongoose.Schema({ 
+    userId: { type: String, required: true, unique: true }, 
+    coins: { type: Number, default: 0 }, 
+    pray: { type: Number, default: 0 }, 
+    lastDaily: { type: Date, default: null }, 
+    lastPray: { type: Date, default: null }, 
+    inventory: { type: Array, default: [] } 
+});
+const OwoModel = mongoose.model('Owo', OwoSchema);
 
 // ==========================================
 // EXPRESS API (KÖPRÜ)
@@ -173,7 +186,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         
         if (roleLogChannel) {
             const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
-            const removedRoles = oldMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
+            const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
             
             let desc = `👤 **Kullanıcı:** <@${newMember.id}> (\`${newMember.user.tag}\`)\n\n`;
             
@@ -215,14 +228,15 @@ client.on('messageCreate', async message => {
         await config.save();
     }
 
-    // --- NOKTA KOMUTLARI YÖNETİCİSİ (.duyuru vb.) ---
+    // --- NOKTA KOMUTLARI YÖNETİCİSİ (.duyuru, .daily vb.) ---
     if (message.content.startsWith('.')) {
         const args = message.content.slice(1).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
         const command = client.textCommands.get(commandName);
         if (command) {
             try {
-                await command.executeText(message, args, UserModel, TicketModel, ConfigModel, CountingModel);
+                // OwoModel buraya eklendi ki commands içindeki dosyalar veritabanını görsün!
+                await command.executeText(message, args, UserModel, TicketModel, ConfigModel, CountingModel, OwoModel);
             } catch (error) {
                 console.error("Text Command Error:", error);
             }
