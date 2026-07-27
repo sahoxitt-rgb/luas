@@ -188,7 +188,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (GERÇEK GEMINI API SOHBET MOTORU)
+// MESAJ DİNLEME (V1 API GEMINI SOHBET MOTORU)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -253,7 +253,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- GERÇEK GEMINI REST API İLE SOHBET ---
+    // --- GERÇEK GEMINI V1 REST API İLE SOHBET ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -271,7 +271,8 @@ client.on('messageCreate', async message => {
 
             const fullPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, enerjik ve kanka ağzıyla konuşan birisin. Asla bir yapay zeka olduğunu belli etme, insan gibi davran. Kullanıcının şu mesajına çok uzun olmayan, akıcı bir cevap ver: ${prompt}`;
 
-            const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            // DÜZELTİLDİ: v1beta yerine v1 sürüm endpoint'i kullanıldı
+            const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
