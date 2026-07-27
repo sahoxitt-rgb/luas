@@ -28,7 +28,7 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor('#00FF00')
             .setTitle('🔢 Counting Channel Setup!')
-            .setDescription('This channel is now set for **English** counting.\n\nRules:\n1️⃣ Start counting from `1` sequentially.\n2️⃣ You cannot count twice in a row.\n3️⃣ If you mess up, you get **muted for 5 seconds** and counting restarts.')
+            .setDescription('This channel is now set for **English** counting.\n\nRules:\n1️⃣ Start counting from `1` sequentially.\n2️⃣ You cannot count twice in a row.\n3️⃣ If you mess up, you get **muted for 5 seconds** but counting **CONTINUES FROM WHERE IT LEFT OFF.**')
             .setFooter({ text: 'Luas • Entertainment System' });
 
         await interaction.reply({ embeds: [embed] });

@@ -125,9 +125,10 @@ process.on('unhandledRejection', async (error) => await sendErrorLog(error.stack
 process.on('uncaughtException', async (error) => await sendErrorLog(error.stack || error.message || String(error)));
 
 // ==========================================
-// BOOST DEDEKTÖRÜ (ÖZEL KANAL + OTO ROL)
+// BOOST DEDEKTÖRÜ VE ROL LOG (YENİ)
 // ==========================================
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    // 1. Boost Logu
     if (!oldMember.premiumSince && newMember.premiumSince) {
         const boostRolId = "1531013766945308863"; 
         const boostRol = newMember.guild.roles.cache.get(boostRolId);
@@ -151,6 +152,36 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
             await channel.send({ content: `Hey <@${newMember.id}>, desteğin için sonsuz teşekkürler! 💖`, embeds: [boostEmbed] }).catch(() => {});
         }
     }
+
+    // 2. Rol Güncelleme Logu (Ekleme / Çıkarma)
+    if (oldMember.roles.cache.size !== newMember.roles.cache.size) {
+        const roleLogChannelId = "1531264336625012927"; // Yeni eklenen Rol Log kanalı
+        const roleLogChannel = newMember.guild.channels.cache.get(roleLogChannelId);
+        
+        if (roleLogChannel) {
+            // Hangi roller eklendi, hangileri çıkarıldı buluyoruz
+            const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
+            const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
+            
+            let desc = `👤 **Kullanıcı:** <@${newMember.id}> (\`${newMember.user.tag}\`)\n\n`;
+            
+            if (addedRoles.size > 0) {
+                desc += `✅ **Eklenen Rol(ler):** ${addedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
+            }
+            if (removedRoles.size > 0) {
+                desc += `❌ **Alınan Rol(ler):** ${removedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
+            }
+            
+            const roleEmbed = new EmbedBuilder()
+                .setColor('#FFA500') // Turuncu uyarı rengi
+                .setTitle('🛠️ Üye Rolleri Güncellendi')
+                .setDescription(desc)
+                .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+                .setTimestamp();
+                
+            await roleLogChannel.send({ embeds: [roleEmbed] }).catch(() => {});
+        }
+    }
 });
 
 // ==========================================
@@ -170,11 +201,21 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (SAYI, ABONE VE MANUEL SES KOMUTU)
+// MESAJ DİNLEME (SELAM, SAYI, ABONE VE SES)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
+
+    // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
+    const exactGreetings = ["sa", "s.a", "sea", "slm", "selam"];
+    const includesGreetings = ["selamun aleyküm", "selamun aleykum", "selamın aleyküm", "selamın aleykum", "selam aleykum", "selam aleyküm"];
+    const msgLower = message.content.toLowerCase().trim();
+
+    // Eğer mesajda selam kelimeleri tam uyuyorsa (veya içinde selamun aleyküm geçiyorsa)
+    if (exactGreetings.includes(msgLower) || includesGreetings.some(g => msgLower.includes(g))) {
+        message.reply({ content: `Aleyküm Selam <@${message.author.id}>, Nasılsın?` }).catch(() => {});
+    }
 
     // --- MANUEL SESE BAĞLAMA KOMUTU ---
     if (message.content.toLowerCase() === '.sesebaglan') {
