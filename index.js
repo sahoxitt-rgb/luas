@@ -7,11 +7,18 @@ const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
 const { joinVoiceChannel } = require('@discordjs/voice');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const ayarlar = require('./roller.js');
 
 const app = express();
 app.use(express.json());
+
+// ==========================================
+// YAPAY ZEKA (GEMINI) GERÇEK API BAĞLANTISI
+// ==========================================
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -165,7 +172,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
             if (addedRoles.size > 0) desc += `✅ **Eklenen Rol(ler):** ${addedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
             if (removedRoles.size > 0) desc += `❌ **Alınan Rol(ler):** ${removedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
             
-            const roleEmbed = new EmbedBuilder().setColor('#FFA500').setTitle('🛠️ Üye Rolleri Güncellendi').setDescription(desc).setThumbnail(newMember.user.displayAvatarURL({ dynamic: true })) .setTimestamp();
+            const roleEmbed = new EmbedBuilder().setColor('#FFA500').setTitle('🛠️ Üye Rolleri Güncellendi').setDescription(desc).setThumbnail(newMember.user.displayAvatarURL({ dynamic: true })).setTimestamp();
             await roleLogChannel.send({ embeds: [roleEmbed] }).catch(() => {});
         }
     }
@@ -188,11 +195,9 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (2-3 MESAJ HAFIZALI AKILLI SOHBET)
+// MESAJ DİNLEME (GERÇEK GEMINI API SOHBET)
 // ==========================================
-const channelHistories = new Map();
 let queueCount = 0; 
-
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
@@ -224,7 +229,7 @@ client.on('messageCreate', async message => {
             await config.save();
             return message.reply({ content: `✅ Yapay zeka sohbeti bu kanaldan kaldırıldı kanka, sustum!` }).catch(() => {});
         } else {
-            return message.reply({ content: `❌ Kanka burası zaten yapay zeka kanalı değil ki!` }).catch(() => {});
+            return message.reply({ content: '❌ Kanka burası zaten yapay zeka kanalı değil ki!' }).catch(() => {});
         }
     }
 
@@ -255,7 +260,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- 2-3 MESAJ BAĞLAMINI OKUYAN AKILLI YEREL SOHBET SİSTEMİ ---
+    // --- GERÇEK GEMINI API İLE AKILLI SOHBET ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -263,47 +268,28 @@ client.on('messageCreate', async message => {
         const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
         if (prompt.length === 0) return;
 
-        await message.channel.sendTyping();
-
-        // Kanal geçmişini yönet (Son 4 mesajı tutuyoruz)
-        if (!channelHistories.has(message.channel.id)) {
-            channelHistories.set(message.channel.id, []);
+        if (!aiModel) {
+            return message.reply({ content: "Kanka beynim eksik (GEMINI_API_KEY tanımlı değil)." }).catch(() => {});
         }
-        const history = channelHistories.get(message.channel.id);
-        history.push({ user: message.author.username, text: prompt.toLowerCase() });
-        if (history.length > 4) history.shift();
 
-        setTimeout(async () => {
-            let replyText = "Eyvallah kanka, aynen öyle.";
-            const allText = history.map(h => h.text).join(" ");
+        try {
+            await message.channel.sendTyping();
 
-            if (prompt.toLowerCase().includes('sa') || prompt.toLowerCase().includes('selam')) {
-                replyText = `Aleyküm selam ${message.author.username}, naber kanka?`;
-            } else if (allText.includes('iyi') || allText.includes('iyiyim') || allText.includes('süper') || allText.includes('taş gibi')) {
-                replyText = `Ooo maşallah ${message.author.username}, daim olsun kanka! Var mı bugün planlar, takılıyor muyuz bi' yerlerde?`;
-            } else if (prompt.toLowerCase().includes('script') || prompt.toLowerCase().includes('hile') || prompt.toLowerCase().includes('hack')) {
-                replyText = "Scriptler tıkır tıkır çalışıyor kanka, güncellemeler duyuru kanalında takipte kal 😉";
-            } else if (prompt.toLowerCase().includes('roblox') || prompt.toLowerCase().includes('arsenal') || prompt.toLowerCase().includes('valorant')) {
-                replyText = `Ooo ${prompt} dedin mi kalbimi çaldın kanka, kapışalım bir ara!`;
-            } else if (prompt.toLowerCase().includes('nasılsın') || prompt.toLowerCase().includes('naber')) {
-                replyText = "Bomba gibiyim kanka, kodlarla uğraşıp duruyorum sen n'apıyorsun?";
-            } else if (prompt.toLowerCase().includes('owner') || prompt.toLowerCase().includes('sahip') || prompt.toLowerCase().includes('kim kurdu')) {
-                replyText = "Sunucunun ve benim sahibim <@5255umutcan34> kral adamdır, gerisi teferruat 😎";
-            } else {
-                const smartResponses = [
-                    "Valla çok haklısın kanka, mantıklı konuştun :D",
-                    "Anladım seni reis, aynen öyle valla başka plan var mı?",
-                    "Hadi ya, desene efsane olay kanka.",
-                    "Hmm, mantıklı mantıklı... Bunu da not alalım köşeye."
-                ];
-                replyText = smartResponses[Math.floor(Math.random() * smartResponses.length)];
-            }
+            // Doğrudan resmi SDK üzerinden gerçek API çağrısı
+            const fullPrompt = `Senin adın Luas Bot. Discord'daki bir yazılım ve script sunucusunun samimi kankasısın. 
+Karakterin: Ne çok resmi ne de aşırı cıvık; normal ile eğlenceli arasında, samimi, doğal bir kanka dili. Asla bot olduğunu belli etme.
+Kullanıcının şu mesajına doğal, akıcı ve kısa bir cevap ver: ${prompt}`;
 
-            history.push({ user: "Luas Bot", text: replyText.toLowerCase() });
-            await message.reply({ content: replyText }).catch(() => {});
-        }, 500);
+            const result = await aiModel.generateContent(fullPrompt);
+            const response = await result.response;
+            const text = response.text();
 
-        return; 
+            const safeReply = text.length > 1950 ? text.substring(0, 1950) + '...' : text;
+            return message.reply({ content: safeReply }).catch(() => {});
+        } catch (err) {
+            console.error("Gemini API Hatası:", err);
+            return message.reply({ content: "Kanka anlık bir API hatası oldu, tekrar yazarsan duyacağım." }).catch(() => {});
+        }
     }
 
     // --- OTOMATİK SELAMLAŞMA SİSTEMİ ---
