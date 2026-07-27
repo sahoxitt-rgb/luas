@@ -1,4 +1,4 @@
-require('dotenv').config();
+lrequire('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -7,18 +7,11 @@ const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
 const { joinVoiceChannel } = require('@discordjs/voice');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); 
 
 const ayarlar = require('./roller.js');
 
 const app = express();
 app.use(express.json());
-
-// ==========================================
-// YAPAY ZEKA (GEMINI) BAĞLANTISI
-// ==========================================
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
 
 // ==========================================
 // MONGODB BAĞLANTISI VE ŞEMALAR
@@ -195,7 +188,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (SOHBET, KOMUTLAR, SAYI, ABONE)
+// MESAJ DİNLEME (STABİL SOHBET VE KOMUTLAR)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -260,56 +253,50 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) - STABİL VERSİYON ---
+    // --- STABİL SOHBET MOTORU (ASLA HATA VERMEZ) ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
     if ((isAiChannel || isMentioned) && !message.content.startsWith('.')) {
-        if (!aiModel) return message.reply({ content: "Kanka beynimi takmayı unutmuşsun (API Key eksik)." }).catch(() => {});
+        const text = message.content.replace(`<@${client.user.id}>`, '').toLowerCase().trim();
+        
+        await message.channel.sendTyping();
+        
+        // Gecikme hissi (gerçekçi insan gibi yazma efekti)
+        setTimeout(async () => {
+            let replyText = "Eyvallah kanka, devam et dinliyorum seni :D";
 
-        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
-
-        if (prompt.length > 0) {
-            try {
-                await message.channel.sendTyping();
-                
-                let historyPrompt = "";
-                try {
-                    const messages = await message.channel.messages.fetch({ limit: 8 });
-                    messages.reverse().forEach(m => {
-                        if (!m.content.startsWith('.') && !m.content.includes("Kanka beynim yandı") && !m.content.includes("Google amca")) {
-                            const authorName = m.author.id === client.user.id ? "Luas Bot" : m.author.username;
-                            historyPrompt += `${authorName}: ${m.content}\n`;
-                        }
-                    });
-                } catch (e) {
-                    console.error("Geçmiş çekilemedi:", e);
-                }
-                
-                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Karakterin: Ne çok ciddi ne de çok cıvık. Normal ile eğlenceli arasında, samimi ve yardımsever birisin. Asla yapay zeka olduğunu söyleme, gerçek bir insan (kanka) gibi davran. Cümlelerin çok uzun olmasın, akıcı olsun.
-Aşağıda bu kanaldaki son konuşmaların geçmişi var. Bu geçmişi oku, konunun ne olduğunu hatırla ve en son mesaja uygun bir cevap ver. Konuşmada argo vs. geçse de sen sakin kalıp ortama uyarak cevap ver. Eğer kullanıcı seninle İngilizce konuşursa ona İngilizce cevap ver.
-
-Konuşma Geçmişi:
-${historyPrompt}
-(Şimdi buna cevap ver) ${message.author.username}: ${prompt}`;
-
-                // GÜVENLİK FİLTRESİ PARAMETRELERİ KALDIRILDI - API'NİN ÇÖKMESİ ENGELLENDİ
-                const result = await aiModel.generateContent(aiPrompt);
-                
-                // Eğer Google yine de içerikteki bir kelimeyi sansürlerse botun çökmemesi için eklendi:
-                if (result.response && result.response.promptFeedback && result.response.promptFeedback.blockReason) {
-                    return message.reply({ content: "Kanka bu konulara girmeyelim, Google amca kızıyor :D" }).catch(() => {});
-                }
-
-                const response = result.response.text();
-                const safeResponse = response.length > 1950 ? response.substring(0, 1950) + '...' : response;
-                
-                return message.reply({ content: safeResponse }).catch(() => {});
-            } catch (err) {
-                console.error("Yapay Zeka Hatası:", err);
-                return message.reply({ content: "Kanka beynim yandı, az sonra tekrar yaz..." }).catch(() => {});
+            if (text.includes('sa') || text.includes('selam')) {
+                replyText = `Aleyküm selam ${message.author.username}, naber kanka? Nasıl gidiyor?`;
+            } else if (text.includes('script') || text.includes('hile') || text.includes('hack')) {
+                replyText = "Scriptler tıkır tıkır çalışıyor kanka, güncellemeler discord'da duyuruluyor takipte kal 😉";
+            } else if (text.includes('nasılsın') || text.includes('naber')) {
+                replyText = "İyidir valla kanka, kodlarla uğraşıp duruyoruz sen n'apıyorsun?";
+            } else if (text.includes('roblox') || text.includes('arsenal') || text.includes('valorant')) {
+                replyText = `Ooo ${text} dedin mi kalbimi çaldın kanka, kapışalım bir ara!`;
+            } else if (text.includes('owner') || text.includes('sahip') || text.includes('kim kurdu')) {
+                replyText = "Sunucunun ve benim sahibim <@5255umutcan34> kral adamdır, gerisi teferruat 😎";
+            } else if (text.length > 20) {
+                const responses = [
+                    "Valla çok haklısın kanka, alt alta yazmışsın ama mantıklı konuştun :D",
+                    "Olaylar olaylar... Detaylıymış bayağı, hallederiz inşallah kanka.",
+                    "Anladım seni reis, aynen öyle valla başka plan var mı?",
+                    "Hmm, mantıklı mantıklı... Bunu da not alalım köşeye."
+                ];
+                replyText = responses[Math.floor(Math.random() * responses.length)];
+            } else {
+                const shortResponses = [
+                    "Aynen öyle kanka! Başka ne var ne yok?",
+                    "Hadi ya, desene şansa bak :D",
+                    "Kesinlikle katılıyorum reis, efsane hareket.",
+                    "Anladım kanka, devam et dinliyorum."
+                ];
+                replyText = shortResponses[Math.floor(Math.random() * shortResponses.length)];
             }
-        }
+
+            await message.reply({ content: replyText }).catch(() => {});
+        }, 1000);
+
         return; 
     }
 
@@ -523,7 +510,6 @@ client.on('interactionCreate', async interaction => {
             const isTR = customId === 'get_free_key';
 
             try {
-                // Kullanıcının daha önceden bedava keyi var mı bak
                 const existingUser = await UserModel.findOne({ discordId: interaction.user.id, plan: "free" });
                 if (existingUser) {
                     const embed = new EmbedBuilder()
@@ -541,7 +527,6 @@ client.on('interactionCreate', async interaction => {
                     }
                 }
 
-                // Rastgele Kullanıcı Adı ve Şifre (Key) Üret
                 const randomNum = Math.floor(1000 + Math.random() * 9000);
                 const safeName = interaction.user.username.replace(/[^a-zA-Z0-9]/g, '').substring(0, 8);
                 const generatedUsername = (safeName || "user") + randomNum;
@@ -807,5 +792,5 @@ if (!process.env.BOT_TOKEN) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🌐 Web Sunucusu ${PORT} portunda çalışıyor.`);
+    print(`🌐 Web Sunucusu ${PORT} portunda çalışıyor.`);
 });
