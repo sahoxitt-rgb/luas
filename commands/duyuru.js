@@ -1,4 +1,4 @@
-const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
     name: 'duyuru',
@@ -12,39 +12,37 @@ module.exports = {
         const resimDosyasi = message.attachments.first();
 
         if (!duyuruMetni && !resimDosyasi) {
-            return message.reply({ content: '❌ Kanka duyuru metni yazmalısın veya bir görsel eklemelisin! Örnek: `.duyuru Merhaba millet`' }).catch(() => {});
+            return message.reply({ content: '❌ Kanka duyuru metni yazmalısın veya bir görsel eklemelisin!' }).catch(() => {});
         }
 
         const webhookUrl = "https://canary.discord.com/api/webhooks/1531299789726023962/OC1RWIlWqrlMSWsdDRSC6LVK7N6ZX6P64hEE0jOkjaPuIEcciqIgsa4jlV0IZ4AcpnSg";
 
         try {
-            const embed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setTitle('📢 **YENİ DUYURU**')
-                .setDescription(duyuruMetni || '*Görsel Duyurusu*')
-                .setFooter({ text: `Yetkili: ${message.author.tag}`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                .setTimestamp();
+            const formData = new FormData();
+            
+            let payloadJson = {
+                username: "Luas Duyuru Sistemi",
+                avatar_url: message.client.user.displayAvatarURL(),
+                content: duyuruMetni ? `📢 **YENİ DUYURU**\n\n${duyuruMetni}` : "📢 **YENİ DUYURU**"
+            };
+
+            formData.append('payload_json', JSON.stringify(payloadJson));
 
             if (resimDosyasi) {
-                embed.setImage(resimDosyasi.url);
+                const imgRes = await fetch(resimDosyasi.url);
+                const blob = await imgRes.blob();
+                formData.append('file0', blob, resimDosyasi.name);
             }
 
-            // Webhook ile gönderim
             const response = await fetch(webhookUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: "Luas Duyuru Sistemi",
-                    avatar_url: message.client.user.displayAvatarURL(),
-                    embeds: [embed.toJSON()]
-                })
+                body: formData
             });
 
             if (!response.ok) {
-                return message.channel.send({ content: '❌ Webhook üzerinden duyuru gönderilemedi kanka.' }).catch(() => {});
+                return message.channel.send({ content: '❌ Webhook üzerinden resim gönderilemedi kanka.' }).catch(() => {});
             }
 
-            // Webhook gönderildikten sonra senin yazdığın komut mesajını silelim ki ortalık temiz kalsın
             await message.delete().catch(() => {});
         } catch (error) {
             console.error("Duyuru Komutu Hatası:", error);
