@@ -273,7 +273,6 @@ client.on('messageCreate', async message => {
             try {
                 await message.channel.sendTyping();
                 
-                // Botun hafızası için son 8 mesajı çekiyoruz (Hata mesajlarını dahil etmiyoruz)
                 let historyPrompt = "";
                 try {
                     const messages = await message.channel.messages.fetch({ limit: 8 });
@@ -287,7 +286,6 @@ client.on('messageCreate', async message => {
                     console.error("Geçmiş çekilemedi:", e);
                 }
                 
-                // Güncellenmiş bot kişiliği (Normal ile eğlenceli arası)
                 const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Karakterin: Ne çok ciddi ne de çok cıvık. Normal ile eğlenceli arasında, samimi ve yardımsever birisin. Asla yapay zeka olduğunu söyleme, gerçek bir insan (kanka) gibi davran. Cümlelerin çok uzun olmasın, akıcı olsun.
 
 Aşağıda bu kanaldaki son konuşmaların geçmişi var. Bu geçmişi oku, konunun ne olduğunu hatırla ve en son mesaja uygun bir cevap ver. Konuşmada argo vs. geçse de sen sakin kalıp ortama uyarak cevap ver.
@@ -296,7 +294,6 @@ Konuşma Geçmişi:
 ${historyPrompt}
 (Şimdi buna cevap ver) ${message.author.username}: ${prompt}`;
 
-                // GÜVENLİK ŞALTERLERİNİ İNDİRİYORUZ (HATA VERMEMESİ İÇİN)
                 const safetySettings = [
                     { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
                     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -425,7 +422,6 @@ ${historyPrompt}
                 const role = message.guild.roles.cache.get(roleId);
                 if (role) await message.member.roles.add(role).catch(() => {});
 
-                // KANALI GİZLE
                 await message.channel.permissionOverwrites.delete(message.author.id).catch(() => {});
 
                 const dmEmbed = new EmbedBuilder().setColor('#00FF00').setTitle(isTR ? '🎉 Aboneliğiniz Onaylandı!' : '🎉 Subscription Verified!').setDescription(isTR ? `Tebrikler! Gönderdiğiniz ekran görüntüsü **Yapay Zeka** tarafından onaylandı ve \`Abone\` rolünüz verildi.` : `Congratulations! Your screenshot has been verified by **AI** and you received the \`Subscriber\` role.`).setTimestamp();
@@ -526,6 +522,57 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
+        // --- YENİ ADAMA AKILLI BEDAVA KEY SİSTEMİ ---
+        if (customId === 'get_free_key' || customId === 'get_free_key_en') {
+            await interaction.deferReply({ ephemeral: true });
+            const isTR = customId === 'get_free_key';
+
+            try {
+                // Kullanıcının daha önceden bedava keyi var mı bak
+                const existingUser = await UserModel.findOne({ discordId: interaction.user.id, plan: "free" });
+                if (existingUser) {
+                    const embed = new EmbedBuilder()
+                        .setColor('#FF0000')
+                        .setTitle(isTR ? '⚠️ Zaten Hesabın Var!' : '⚠️ You Already Have an Account!')
+                        .setDescription(isTR 
+                            ? `Zaten daha önce bir bedava hesap oluşturmuşsun!\n\n👤 **Kullanıcı Adın:** \`${existingUser.username}\`\n🔑 **Key'in:** \`${existingUser.password}\`` 
+                            : `You have already generated a free account!\n\n👤 **Username:** \`${existingUser.username}\`\n🔑 **Key:** \`${existingUser.password}\``);
+                    return interaction.editReply({ embeds: [embed] });
+                }
+
+                // Rastgele Kullanıcı Adı ve Şifre (Key) Üret
+                const randomNum = Math.floor(1000 + Math.random() * 9000);
+                const safeName = interaction.user.username.replace(/[^a-zA-Z0-9]/g, '').substring(0, 8);
+                const generatedUsername = (safeName || "user") + randomNum;
+                const generatedKey = "LUAS-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+                const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
+
+                const newUser = new UserModel({
+                    username: generatedUsername,
+                    password: generatedKey,
+                    keyId: uniqueKeyId,
+                    plan: "free",
+                    duration: "Sınırsız",
+                    discordId: interaction.user.id,
+                    creatorTag: interaction.user.tag
+                });
+                await newUser.save();
+
+                const successEmbed = new EmbedBuilder()
+                    .setColor('#00FF00')
+                    .setTitle(isTR ? '🎁 Bedava Hesabın Oluşturuldu!' : '🎁 Free Account Generated!')
+                    .setDescription(isTR 
+                        ? `🎉 Script'e giriş yapabilmen için bilgilerin başarıyla oluşturuldu!\n\n👤 **Kullanıcı Adı:** \`${generatedUsername}\`\n🔑 **Key (Şifre):** \`${generatedKey}\`\n\n*(Lütfen bu bilgileri kimseyle paylaşma!)*` 
+                        : `🎉 Your login credentials have been successfully generated!\n\n👤 **Username:** \`${generatedUsername}\`\n🔑 **Key (Password):** \`${generatedKey}\`\n\n*(Please do not share this information!)*`);
+                
+                await interaction.editReply({ embeds: [successEmbed] });
+            } catch (err) {
+                await interaction.editReply({ content: '❌ Veritabanı hatası oluştu, lütfen yetkiliye bildirin.' });
+            }
+            return;
+        }
+
+        // --- DİĞER BUTON İŞLEMLERİ ---
         if (customId === 'verify_tr' || customId === 'verify_en') {
             await interaction.deferReply({ ephemeral: true });
             
@@ -649,9 +696,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         let commandName = '';
-        if (customId === 'get_free_key') commandName = 'bedava-key';
-        else if (customId === 'get_free_key_en') commandName = 'free-key';
-        else if (customId === 'open_custom_modal') commandName = 'ozel-key';
+        if (customId === 'open_custom_modal') commandName = 'ozel-key';
         
         if (commandName !== '') {
             const command = client.commands.get(commandName);
@@ -735,7 +780,10 @@ client.on('interactionCreate', async interaction => {
                 const uniqueKeyId = Math.floor(100000 + Math.random() * 900000).toString();
                 const newUser = new UserModel({ username, password, keyId: uniqueKeyId, plan: "premium", duration, discordId: interaction.user.id, creatorTag: interaction.user.tag });
                 await newUser.save();
-                const replyEmbed = new EmbedBuilder().setColor('#FFD700').setTitle('💎 Özel Key Oluşturuldu').setDescription(`🚀 **Key:** \`${password}\`\n🆔 **ID:** \`${uniqueKeyId}\`\n👑 **Sahip:** \`${username}\``);
+                
+                // Adminin de kafası karışmasın, "Kullanıcı Adı" diye kocaman yazdım
+                const replyEmbed = new EmbedBuilder().setColor('#FFD700').setTitle('💎 Özel Hesap (Key) Oluşturuldu').setDescription(`🚀 **Giriş Bilgileri Hazır!**\n\n👤 **Kullanıcı Adı:** \`${username}\`\n🔑 **Key (Şifre):** \`${password}\`\n🆔 **Benzersiz ID:** \`${uniqueKeyId}\``);
+                
                 const logChannelId = process.env.LOG_CHANNEL_ID;
                 if (logChannelId) {
                     const logChannel = interaction.client.channels.cache.get(logChannelId);
