@@ -1,4 +1,4 @@
-lrequire('dotenv').config();
+require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -188,7 +188,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (STABİL SOHBET VE KOMUTLAR)
+// MESAJ DİNLEME (HAFIZALI & DOĞRUDAN API SOHBET)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -253,50 +253,70 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- STABİL SOHBET MOTORU (ASLA HATA VERMEZ) ---
+    // --- GERÇEK HAFIZALI & DOĞRUDAN API SOHBET MOTORU ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
     if ((isAiChannel || isMentioned) && !message.content.startsWith('.')) {
-        const text = message.content.replace(`<@${client.user.id}>`, '').toLowerCase().trim();
-        
-        await message.channel.sendTyping();
-        
-        // Gecikme hissi (gerçekçi insan gibi yazma efekti)
-        setTimeout(async () => {
-            let replyText = "Eyvallah kanka, devam et dinliyorum seni :D";
+        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
 
-            if (text.includes('sa') || text.includes('selam')) {
-                replyText = `Aleyküm selam ${message.author.username}, naber kanka? Nasıl gidiyor?`;
-            } else if (text.includes('script') || text.includes('hile') || text.includes('hack')) {
-                replyText = "Scriptler tıkır tıkır çalışıyor kanka, güncellemeler discord'da duyuruluyor takipte kal 😉";
-            } else if (text.includes('nasılsın') || text.includes('naber')) {
-                replyText = "İyidir valla kanka, kodlarla uğraşıp duruyoruz sen n'apıyorsun?";
-            } else if (text.includes('roblox') || text.includes('arsenal') || text.includes('valorant')) {
-                replyText = `Ooo ${text} dedin mi kalbimi çaldın kanka, kapışalım bir ara!`;
-            } else if (text.includes('owner') || text.includes('sahip') || text.includes('kim kurdu')) {
-                replyText = "Sunucunun ve benim sahibim <@5255umutcan34> kral adamdır, gerisi teferruat 😎";
-            } else if (text.length > 20) {
-                const responses = [
-                    "Valla çok haklısın kanka, alt alta yazmışsın ama mantıklı konuştun :D",
-                    "Olaylar olaylar... Detaylıymış bayağı, hallederiz inşallah kanka.",
-                    "Anladım seni reis, aynen öyle valla başka plan var mı?",
-                    "Hmm, mantıklı mantıklı... Bunu da not alalım köşeye."
-                ];
-                replyText = responses[Math.floor(Math.random() * responses.length)];
-            } else {
-                const shortResponses = [
-                    "Aynen öyle kanka! Başka ne var ne yok?",
-                    "Hadi ya, desene şansa bak :D",
-                    "Kesinlikle katılıyorum reis, efsane hareket.",
-                    "Anladım kanka, devam et dinliyorum."
-                ];
-                replyText = shortResponses[Math.floor(Math.random() * shortResponses.length)];
+        if (prompt.length > 0) {
+            try {
+                await message.channel.sendTyping();
+
+                // Kanaldaki son 10 mesajın geçmişini (hafızayı) topluyoruz
+                let historyText = "";
+                try {
+                    const fetchedMessages = await message.channel.messages.fetch({ limit: 10 });
+                    fetchedMessages.reverse().forEach(m => {
+                        if (!m.content.startsWith('.')) {
+                            const sender = m.author.id === client.user.id ? "Luas Bot" : m.author.username;
+                            historyText += `${sender}: ${m.content}\n`;
+                        }
+                    });
+                } catch (err) {
+                    console.error("Geçmiş okunamadı:", err);
+                }
+
+                const fullPrompt = `Senin adın Luas Bot. Discord'daki bir yazılım ve script sunucusunun akıllı kankasısın. 
+Karakterin: Ne çok resmi ne de aşırı cıvık; normal ile eğlenceli arasında, samimi, akıllı ve doğal bir kanka dili. Asla bir bot veya yapay zeka olduğunu belli etme.
+Aşağıda kanalın son konuşma geçmişi var. Bu geçmişi dikkatlice inceleyerek bağlamı (ne konuşulduğunu, oyun adlarını vb.) anla ve kullanıcının en son mesajına göre konuşmanın akışına uygun, kısa ve net bir cevap ver. Eğer kullanıcı İngilizce yazarsa İngilizce, Türkçe yazarsa Türkçe cevap ver.
+
+Konuşma Geçmişi:
+${historyText}
+En son mesajı yazan: ${message.author.username}
+Son mesaj: ${prompt}
+
+Cevabın:`;
+
+                // Doğrudan REST API İsteği (SDK kaynaklı 404/500 hatalarını sıfırlar)
+                const apiKey = process.env.GEMINI_API_KEY;
+                if (!apiKey) {
+                    return message.reply({ content: "Kanka API key eksik, ayarlardan eklemelisin." }).catch(() => {});
+                }
+
+                const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: fullPrompt }] }]
+                    })
+                });
+
+                const data = await apiRes.json();
+
+                if (data && data.candidates && data.candidates[0] && data.candidates[0].content) {
+                    const reply = data.candidates[0].content.parts[0].text;
+                    const safeReply = reply.length > 1950 ? reply.substring(0, 1950) + '...' : reply;
+                    return message.reply({ content: safeReply }).catch(() => {});
+                } else {
+                    return message.reply({ content: `Eyvallah kanka, ${prompt} konusunda haklısın devam edelim!` }).catch(() => {});
+                }
+            } catch (err) {
+                console.error("Yapay Zeka Hatası:", err);
+                return message.reply({ content: `Anladım kanka, ${prompt} olayını takipteyim!` }).catch(() => {});
             }
-
-            await message.reply({ content: replyText }).catch(() => {});
-        }, 1000);
-
+        }
         return; 
     }
 
@@ -792,5 +812,5 @@ if (!process.env.BOT_TOKEN) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    print(`🌐 Web Sunucusu ${PORT} portunda çalışıyor.`);
+    console.log(`🌐 Web Sunucusu ${PORT} portunda çalışıyor.`);
 });
