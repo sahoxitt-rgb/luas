@@ -165,7 +165,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
             if (addedRoles.size > 0) desc += `✅ **Eklenen Rol(ler):** ${addedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
             if (removedRoles.size > 0) desc += `❌ **Alınan Rol(ler):** ${removedRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
             
-            const roleEmbed = new EmbedBuilder().setColor('#FFA500').setTitle('🛠️ Üye Rolleri Güncellendi').setDescription(desc).setThumbnail(newMember.user.displayAvatarURL({ dynamic: true })).setTimestamp();
+            const roleEmbed = new EmbedBuilder().setColor('#FFA500').setTitle('🛠️ Üye Rolleri Güncellendi').setDescription(desc).setThumbnail(newMember.user.displayAvatarURL({ dynamic: true })) .setTimestamp();
             await roleLogChannel.send({ embeds: [roleEmbed] }).catch(() => {});
         }
     }
@@ -188,9 +188,11 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (STABİL VE HIZLI SOHBET MOTORU)
+// MESAJ DİNLEME (2-3 MESAJ HAFIZALI AKILLI SOHBET)
 // ==========================================
+const channelHistories = new Map();
 let queueCount = 0; 
+
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
@@ -253,46 +255,51 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- STABİL, ANLIK VE HATASIZ SOHBET MOTORU ---
+    // --- 2-3 MESAJ BAĞLAMINI OKUYAN AKILLI YEREL SOHBET SİSTEMİ ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
     if ((isAiChannel || isMentioned) && !message.content.startsWith('.')) {
-        const text = message.content.replace(`<@${client.user.id}>`, '').toLowerCase().trim();
-        
-        await message.channel.sendTyping();
-        
-        setTimeout(async () => {
-            let replyText = "Eyvallah kanka, devam et dinliyorum seni :D";
+        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+        if (prompt.length === 0) return;
 
-            if (text.includes('sa') || text.includes('selam')) {
-                replyText = `Aleyküm selam ${message.author.username}, naber kanka? Nasıl gidiyor?`;
-            } else if (text.includes('script') || text.includes('hile') || text.includes('hack')) {
+        await message.channel.sendTyping();
+
+        // Kanal geçmişini yönet (Son 4 mesajı tutuyoruz)
+        if (!channelHistories.has(message.channel.id)) {
+            channelHistories.set(message.channel.id, []);
+        }
+        const history = channelHistories.get(message.channel.id);
+        history.push({ user: message.author.username, text: prompt.toLowerCase() });
+        if (history.length > 4) history.shift();
+
+        setTimeout(async () => {
+            let replyText = "Eyvallah kanka, aynen öyle.";
+            const allText = history.map(h => h.text).join(" ");
+
+            if (prompt.toLowerCase().includes('sa') || prompt.toLowerCase().includes('selam')) {
+                replyText = `Aleyküm selam ${message.author.username}, naber kanka?`;
+            } else if (allText.includes('iyi') || allText.includes('iyiyim') || allText.includes('süper') || allText.includes('taş gibi')) {
+                replyText = `Ooo maşallah ${message.author.username}, daim olsun kanka! Var mı bugün planlar, takılıyor muyuz bi' yerlerde?`;
+            } else if (prompt.toLowerCase().includes('script') || prompt.toLowerCase().includes('hile') || prompt.toLowerCase().includes('hack')) {
                 replyText = "Scriptler tıkır tıkır çalışıyor kanka, güncellemeler duyuru kanalında takipte kal 😉";
-            } else if (text.includes('nasılsın') || text.includes('naber')) {
-                replyText = "İyidir valla kanka, kodlarla uğraşıp duruyorum sen n'apıyorsun?";
-            } else if (text.includes('roblox') || text.includes('arsenal') || text.includes('valorant')) {
-                replyText = `Ooo ${text} dedin mi kalbimi çaldın kanka, kapışalım bir ara!`;
-            } else if (text.includes('owner') || text.includes('sahip') || text.includes('kim kurdu')) {
+            } else if (prompt.toLowerCase().includes('roblox') || prompt.toLowerCase().includes('arsenal') || prompt.toLowerCase().includes('valorant')) {
+                replyText = `Ooo ${prompt} dedin mi kalbimi çaldın kanka, kapışalım bir ara!`;
+            } else if (prompt.toLowerCase().includes('nasılsın') || prompt.toLowerCase().includes('naber')) {
+                replyText = "Bomba gibiyim kanka, kodlarla uğraşıp duruyorum sen n'apıyorsun?";
+            } else if (prompt.toLowerCase().includes('owner') || prompt.toLowerCase().includes('sahip') || prompt.toLowerCase().includes('kim kurdu')) {
                 replyText = "Sunucunun ve benim sahibim <@5255umutcan34> kral adamdır, gerisi teferruat 😎";
-            } else if (text.length > 15) {
-                const responses = [
+            } else {
+                const smartResponses = [
                     "Valla çok haklısın kanka, mantıklı konuştun :D",
-                    "Olaylar olaylar... Hallederiz inşallah kanka.",
                     "Anladım seni reis, aynen öyle valla başka plan var mı?",
+                    "Hadi ya, desene efsane olay kanka.",
                     "Hmm, mantıklı mantıklı... Bunu da not alalım köşeye."
                 ];
-                replyText = responses[Math.floor(Math.random() * responses.length)];
-            } else {
-                const shortResponses = [
-                    "Aynen öyle kanka! Başka ne var ne yok?",
-                    "Hadi ya, desene şansa bak :D",
-                    "Kesinlikle katılıyorum reis, efsane hareket.",
-                    "Anladım kanka, devam et dinliyorum."
-                ];
-                replyText = shortResponses[Math.floor(Math.random() * shortResponses.length)];
+                replyText = smartResponses[Math.floor(Math.random() * smartResponses.length)];
             }
 
+            history.push({ user: "Luas Bot", text: replyText.toLowerCase() });
             await message.reply({ content: replyText }).catch(() => {});
         }, 500);
 
