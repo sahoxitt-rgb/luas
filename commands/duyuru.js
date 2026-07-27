@@ -29,9 +29,7 @@ module.exports = {
                 embed.setImage(resimDosyasi.url);
             }
 
-            // Komut yazılan orijinal mesajı ortalıktan kaldıralım ki temiz dursun
-            await message.delete().catch(() => {});
-
+            // Webhook ile gönderim
             const response = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -45,6 +43,9 @@ module.exports = {
             if (!response.ok) {
                 return message.channel.send({ content: '❌ Webhook üzerinden duyuru gönderilemedi kanka.' }).catch(() => {});
             }
+
+            // Webhook gönderildikten sonra senin yazdığın komut mesajını silelim ki ortalık temiz kalsın
+            await message.delete().catch(() => {});
         } catch (error) {
             console.error("Duyuru Komutu Hatası:", error);
             message.channel.send({ content: '❌ Duyuru gönderilirken bir hata oluştu.' }).catch(() => {});
