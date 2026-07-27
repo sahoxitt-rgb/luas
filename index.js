@@ -188,7 +188,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (HATASIZ VE BAĞLAM OKUYAN SOHBET)
+// MESAJ DİNLEME (STABİL VE HIZLI SOHBET MOTORU)
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -253,70 +253,49 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- GERÇEK HAFIZALI & %100 ÇALIŞAN REST API SOHBET MOTORU ---
+    // --- STABİL, ANLIK VE HATASIZ SOHBET MOTORU ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
     if ((isAiChannel || isMentioned) && !message.content.startsWith('.')) {
-        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+        const text = message.content.replace(`<@${client.user.id}>`, '').toLowerCase().trim();
+        
+        await message.channel.sendTyping();
+        
+        setTimeout(async () => {
+            let replyText = "Eyvallah kanka, devam et dinliyorum seni :D";
 
-        if (prompt.length > 0) {
-            try {
-                await message.channel.sendTyping();
-
-                let historyText = "";
-                try {
-                    const fetchedMessages = await message.channel.messages.fetch({ limit: 10 });
-                    fetchedMessages.reverse().forEach(m => {
-                        if (!m.content.startsWith('.') && !m.content.includes("Eyvallah kanka")) {
-                            const sender = m.author.id === client.user.id ? "Luas Bot" : m.author.username;
-                            historyText += `${sender}: ${m.content}\n`;
-                        }
-                    });
-                } catch (err) {
-                    console.error("Geçmiş okunamadı:", err);
-                }
-
-                const fullPrompt = `Senin adın Luas Bot. Discord'daki bir yazılım ve script sunucusunun akıllı kankasısın. 
-Karakterin: Ne çok resmi ne de aşırı cıvık; normal ile eğlenceli arasında, samimi, akıllı ve doğal bir kanka dili. Asla bir bot veya yapay zeka olduğunu belli etme.
-Aşağıda kanalın son konuşma geçmişi var. Bu geçmişi dikkatlice inceleyerek bağlamı (ne konuşulduğunu, oyun adlarını vb.) anla ve kullanıcının en son mesajına göre konuşmanın akışına uygun, kısa ve net bir cevap ver. Türkçe yazılanlara Türkçe, İngilizce yazılanlara İngilizce cevap ver.
-
-Konuşma Geçmişi:
-${historyText}
-En son mesajı yazan: ${message.author.username}
-Son mesaj: ${prompt}
-
-Cevabın:`;
-
-                const apiKey = process.env.GEMINI_API_KEY;
-                if (!apiKey) {
-                    return message.reply({ content: "Kanka API key eksik, ayarlardan eklemelisin." }).catch(() => {});
-                }
-
-                // DÜZELTİLDİ: gemini-pro modeli kullanıldı (404 hatasını önlemek için)
-                const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: fullPrompt }] }]
-                    })
-                });
-
-                const data = await apiRes.json();
-
-                if (data && data.candidates && data.candidates[0] && data.candidates[0].content) {
-                    const reply = data.candidates[0].content.parts[0].text;
-                    const safeReply = reply.length > 1950 ? reply.substring(0, 1950) + '...' : reply;
-                    return message.reply({ content: safeReply }).catch(() => {});
-                } else {
-                    console.error("API Yanıt Hatası:", JSON.stringify(data));
-                    return message.reply({ content: "Valla kanka tam o sırada kafam daldı, ne demiştin?" }).catch(() => {});
-                }
-            } catch (err) {
-                console.error("Yapay Zeka Hatası:", err);
-                return message.reply({ content: "Kanka sistemde ufak bir anlık takılma oldu, tekrar yazarsan duyacağım." }).catch(() => {});
+            if (text.includes('sa') || text.includes('selam')) {
+                replyText = `Aleyküm selam ${message.author.username}, naber kanka? Nasıl gidiyor?`;
+            } else if (text.includes('script') || text.includes('hile') || text.includes('hack')) {
+                replyText = "Scriptler tıkır tıkır çalışıyor kanka, güncellemeler duyuru kanalında takipte kal 😉";
+            } else if (text.includes('nasılsın') || text.includes('naber')) {
+                replyText = "İyidir valla kanka, kodlarla uğraşıp duruyorum sen n'apıyorsun?";
+            } else if (text.includes('roblox') || text.includes('arsenal') || text.includes('valorant')) {
+                replyText = `Ooo ${text} dedin mi kalbimi çaldın kanka, kapışalım bir ara!`;
+            } else if (text.includes('owner') || text.includes('sahip') || text.includes('kim kurdu')) {
+                replyText = "Sunucunun ve benim sahibim <@5255umutcan34> kral adamdır, gerisi teferruat 😎";
+            } else if (text.length > 15) {
+                const responses = [
+                    "Valla çok haklısın kanka, mantıklı konuştun :D",
+                    "Olaylar olaylar... Hallederiz inşallah kanka.",
+                    "Anladım seni reis, aynen öyle valla başka plan var mı?",
+                    "Hmm, mantıklı mantıklı... Bunu da not alalım köşeye."
+                ];
+                replyText = responses[Math.floor(Math.random() * responses.length)];
+            } else {
+                const shortResponses = [
+                    "Aynen öyle kanka! Başka ne var ne yok?",
+                    "Hadi ya, desene şansa bak :D",
+                    "Kesinlikle katılıyorum reis, efsane hareket.",
+                    "Anladım kanka, devam et dinliyorum."
+                ];
+                replyText = shortResponses[Math.floor(Math.random() * shortResponses.length)];
             }
-        }
+
+            await message.reply({ content: replyText }).catch(() => {});
+        }, 500);
+
         return; 
     }
 
@@ -412,7 +391,7 @@ Cevabın:`;
             
             const cleanText = text.toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, ''); 
             const hasName = cleanText.includes('luas');
-            const hasSub = cleanText.includes('aboneolundu' ) || cleanText.includes('subscribed');
+            const hasSub = cleanText.includes('aboneolundu') || cleanText.includes('subscribed');
 
             const logChannel = message.guild.channels.cache.get(ayarlar.ABONE_LOG_KANAL_ID);
             const joinedTimestamp = Math.floor(message.member.joinedTimestamp / 1000);
@@ -492,7 +471,7 @@ client.on('guildMemberRemove', async member => {
     if (leaveChannelId) {
         const channel = member.guild.channels.cache.get(leaveChannelId);
         if (channel) {
-            const leaveEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('📤 Sunucudan Üye Ayrıldı (Leave)').setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })) .setFooter({ text: 'Luas • Çıkış Sistemi' }).setTimestamp();
+            const leaveEmbed = new EmbedBuilder().setColor('#FF0000').setTitle('📤 Sunucudan Üye Ayrıldı (Leave)').setDescription(`👤 **Ayrılan Kullanıcı -->** <@${member.id}>\n🏷️ **Kullanıcı Adı -->** \`${member.user.tag}\`\n🆔 **Kullanıcı ID -->** \`${member.id}\`\n👥 **Kalan Üye Sayısı -->** \`${member.guild.memberCount}\``).setThumbnail(member.user.displayAvatarURL({ dynamic: true })).setFooter({ text: 'Luas • Çıkış Sistemi' }).setTimestamp();
             await channel.send({ embeds: [leaveEmbed] }).catch(() => {});
         }
     }
