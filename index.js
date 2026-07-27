@@ -7,7 +7,7 @@ const path = require('path');
 const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Tesseract = require('tesseract.js'); 
 const { joinVoiceChannel } = require('@discordjs/voice');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); 
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai'); 
 
 const ayarlar = require('./roller.js');
 
@@ -260,7 +260,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) - HAFIZALI SÜRÜM ---
+    // --- YAPAY ZEKA SOHBET SİSTEMİ (GEMINI) - HAFIZALI VE GÜVENLİK FİLTRESİZ ---
     const isAiChannel = (config.ai_channel === message.channel.id);
     const isMentioned = message.mentions.has(client.user);
 
@@ -273,12 +273,12 @@ client.on('messageCreate', async message => {
             try {
                 await message.channel.sendTyping();
                 
-                // Botun hafızası için son 8 mesajı çekiyoruz
+                // Botun hafızası için son 8 mesajı çekiyoruz (Hata mesajlarını dahil etmiyoruz)
                 let historyPrompt = "";
                 try {
                     const messages = await message.channel.messages.fetch({ limit: 8 });
                     messages.reverse().forEach(m => {
-                        if (!m.content.startsWith('.')) {
+                        if (!m.content.startsWith('.') && !m.content.includes("Kanka beynim yandı")) {
                             const authorName = m.author.id === client.user.id ? "Luas Bot" : m.author.username;
                             historyPrompt += `${authorName}: ${m.content}\n`;
                         }
@@ -287,18 +287,31 @@ client.on('messageCreate', async message => {
                     console.error("Geçmiş çekilemedi:", e);
                 }
                 
-                // Güncellenmiş bot kişiliği ve geçmişi içeren yeni prompt
-                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Samimi, eğlenceli ama dozunda (çok laubali olmadan, normalle eğlence arası) bir kanka ağzıyla konuşan birisin. Asla bir yapay zeka veya bot olduğunu belli etme, insan gibi davran.
-Aşağıda bu kanaldaki son konuşmaların geçmişi var. Bu geçmişi okuyarak konunun (bağlamın) ne olduğunu anla ve kullanıcının en son yazdığı mesaja mantıklı, akıcı ve çok uzun olmayan bir cevap ver.
+                // Güncellenmiş bot kişiliği (Normal ile eğlenceli arası)
+                const aiPrompt = `Senin adın Luas Bot. Karşındaki kişinin adı ${message.author.username}. Discord'da bir script ve yazılım sunucusundasın. Karakterin: Ne çok ciddi ne de çok cıvık. Normal ile eğlenceli arasında, samimi ve yardımsever birisin. Asla yapay zeka olduğunu söyleme, gerçek bir insan (kanka) gibi davran. Cümlelerin çok uzun olmasın, akıcı olsun.
+
+Aşağıda bu kanaldaki son konuşmaların geçmişi var. Bu geçmişi oku, konunun ne olduğunu hatırla ve en son mesaja uygun bir cevap ver. Konuşmada argo vs. geçse de sen sakin kalıp ortama uyarak cevap ver.
 
 Konuşma Geçmişi:
 ${historyPrompt}
 (Şimdi buna cevap ver) ${message.author.username}: ${prompt}`;
 
-                const result = await aiModel.generateContent(aiPrompt);
-                const response = result.response.text();
+                // GÜVENLİK ŞALTERLERİNİ İNDİRİYORUZ (HATA VERMEMESİ İÇİN)
+                const safetySettings = [
+                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+                ];
 
+                const result = await aiModel.generateContent({
+                    contents: [{ role: "user", parts: [{ text: aiPrompt }] }],
+                    safetySettings
+                });
+
+                const response = result.response.text();
                 const safeResponse = response.length > 1950 ? response.substring(0, 1950) + '...' : response;
+                
                 return message.reply({ content: safeResponse }).catch(() => {});
             } catch (err) {
                 console.error("Yapay Zeka Hatası:", err);
