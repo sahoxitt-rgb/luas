@@ -1,4 +1,4 @@
-const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
     name: 'koruma',
@@ -19,25 +19,31 @@ module.exports = {
 
         if (action === 'kur') {
             
-            // 👇 KANKA İŞTE O İKONUN LİNKİNİ BURAYA YAPIŞTIRACAKSIN 👇
-            // Discord'a o ikonu at, sağ tıkla "Bağlantıyı Kopyala" de ve buraya yapıştır.
-            const gpxIkonLinki = 'IKON_LINKI_BURAYA_GELECEK'; 
+            // Senin attığın resmin Discord'da çalışan direkt halini ayarladım
+            const gpxIkonLinki = 'https://i.ibb.co/mFX524Zp/image.png'; 
 
             const embed = new EmbedBuilder()
                 .setColor('#2B2D31') // Discord arkaplan rengiyle uyumlu siyahımsı
-                .setThumbnail(gpxIkonLinki !== 'IKON_LINKI_BURAYA_GELECEK' ? gpxIkonLinki : 'https://cdn-icons-png.flaticon.com/512/10155/10155823.png'); // Link girmezsen geçici karanlık bir dosya ikonu koyar
+                .setThumbnail(gpxIkonLinki);
 
             if (lang === 'en') {
                 embed.setTitle('DO NOT SEND MESSAGES IN THIS CHANNEL')
-                     .setDescription('This channel is used to catch spam bots. Any messages sent here will result in a **1 hour mute**.')
-                     .addFields({ name: 'Mute', value: `${config.koruma_mutes || 0}`, inline: true });
+                     .setDescription('This channel is used to catch spam bots. Any messages sent here will result in a **1 hour mute**.');
             } else {
                 embed.setTitle('BU KANALA MESAJ GÖNDERMEYİN')
-                     .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.')
-                     .addFields({ name: 'Mute', value: `${config.koruma_mutes || 0}`, inline: true });
+                     .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.');
             }
 
-            const honeypotMsg = await message.channel.send({ embeds: [embed] });
+            // Mute sayacını tekrar panelin altına buton olarak ekledik!
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('dummy_mutes')
+                    .setLabel(lang === 'en' ? `Mute: ${config.koruma_mutes || 0}` : `Susturma: ${config.koruma_mutes || 0}`)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true)
+            );
+
+            const honeypotMsg = await message.channel.send({ embeds: [embed], components: [row] });
 
             config.koruma_channel = message.channel.id;
             config.koruma_message_id = honeypotMsg.id;

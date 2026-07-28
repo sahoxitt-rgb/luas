@@ -196,7 +196,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         
         if (roleLogChannel) {
             const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
-            const removedRoles = oldMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
+            const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
             
             let desc = `👤 **Kullanıcı:** <@${newMember.id}> (\`${newMember.user.tag}\`)\n\n`;
             
@@ -252,21 +252,20 @@ client.on('messageCreate', async message => {
         config.koruma_mutes = (config.koruma_mutes || 0) + 1;
         await config.save();
 
+        // Butonlu sisteme geri döndük, içeriden değil dışarıdan (component) güncelleyecek
         if (config.koruma_message_id) {
             try {
                 const honeypotMsg = await message.channel.messages.fetch(config.koruma_message_id);
-                if (honeypotMsg && honeypotMsg.embeds.length > 0) {
-                    const oldEmbed = honeypotMsg.embeds[0];
-                    const newEmbed = EmbedBuilder.from(oldEmbed);
+                if (honeypotMsg) {
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('dummy_mutes')
+                            .setLabel(config.koruma_lang === 'en' ? `Mute: ${config.koruma_mutes}` : `Susturma: ${config.koruma_mutes}`)
+                            .setStyle(ButtonStyle.Secondary)
+                            .setDisabled(true)
+                    );
                     
-                    if (newEmbed.data.fields && newEmbed.data.fields.length > 0) {
-                        newEmbed.data.fields[0].name = 'Mute'; // Burada da bal küpünü kaldırdık
-                        newEmbed.data.fields[0].value = `${config.koruma_mutes}`;
-                    } else {
-                        newEmbed.addFields({ name: 'Mute', value: `${config.koruma_mutes}`, inline: true });
-                    }
-                    
-                    await honeypotMsg.edit({ embeds: [newEmbed], components: [] }).catch(() => {});
+                    await honeypotMsg.edit({ components: [row] }).catch(() => {});
                 }
             } catch (e) {}
         }
