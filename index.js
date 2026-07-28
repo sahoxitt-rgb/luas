@@ -35,7 +35,7 @@ const UserModel = mongoose.model('User', UserSchema);
 const TicketSchema = new mongoose.Schema({ id: { type: String, default: "ticket" }, count: { type: Number, default: 0 } });
 const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
-// KORUMA SİSTEMİ (DİL DESTEĞİ EKLENDİ)
+// KORUMA SİSTEMİ 
 const ConfigSchema = new mongoose.Schema({ 
     id: { type: String, default: "config" }, 
     tr_ss_channel: { type: String, default: null }, 
@@ -196,7 +196,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         
         if (roleLogChannel) {
             const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
-            const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
+            const removedRoles = oldMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
             
             let desc = `👤 **Kullanıcı:** <@${newMember.id}> (\`${newMember.user.tag}\`)\n\n`;
             
@@ -238,24 +238,20 @@ client.on('messageCreate', async message => {
         await config.save();
     }
 
-    // --- KORUMA (HONEYPOT) KONTROLÜ (EN ÜSTTE ÇALIŞIR) ---
+    // --- KORUMA (HONEYPOT) KONTROLÜ ---
     if (config.koruma_channel === message.channel.id && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
         
-        // 1. Tetiği çeken mesajı anında sil
         await message.delete().catch(() => {});
 
-        // 2. Kişiye 1 Saat Mute At (Timeout)
         try {
             await message.member.timeout(60 * 60 * 1000, 'Koruma kanalına mesaj gönderdi (Honeypot tuzağına düştü)');
         } catch (err) {
             console.error('Mute atılamadı:', err);
         }
 
-        // 3. Veritabanındaki sayacı güncelle
         config.koruma_mutes = (config.koruma_mutes || 0) + 1;
         await config.save();
 
-        // 4. Tuzağın embed mesajındaki Mute sayacını "içeriden" güncelle
         if (config.koruma_message_id) {
             try {
                 const honeypotMsg = await message.channel.messages.fetch(config.koruma_message_id);
@@ -263,24 +259,22 @@ client.on('messageCreate', async message => {
                     const oldEmbed = honeypotMsg.embeds[0];
                     const newEmbed = EmbedBuilder.from(oldEmbed);
                     
-                    // Field varsa sayıyı güncelle, yoksa ekle (1. Field)
                     if (newEmbed.data.fields && newEmbed.data.fields.length > 0) {
+                        newEmbed.data.fields[0].name = 'Mute'; // Burada da bal küpünü kaldırdık
                         newEmbed.data.fields[0].value = `${config.koruma_mutes}`;
                     } else {
-                        newEmbed.addFields({ name: '🍯 Mute', value: `${config.koruma_mutes}`, inline: true });
+                        newEmbed.addFields({ name: 'Mute', value: `${config.koruma_mutes}`, inline: true });
                     }
                     
-                    // Butonları (components) tamamen temizliyoruz çünkü sayaç artık panelin içinde
                     await honeypotMsg.edit({ embeds: [newEmbed], components: [] }).catch(() => {});
                 }
             } catch (e) {}
         }
 
-        // 5. Sunucudaki son 10 dakikada yazdığı TÜM mesajları sil (Tüm kanalları tarar)
         const tenMinsAgo = Date.now() - (10 * 60 * 1000);
         message.guild.channels.cache.filter(c => c.isTextBased()).forEach(async (ch) => {
             try {
-                const msgs = await ch.messages.fetch({ limit: 50 }); // Her kanaldaki son 50 mesaja bakar
+                const msgs = await ch.messages.fetch({ limit: 50 }); 
                 const userMsgs = msgs.filter(m => m.author.id === message.author.id && m.createdTimestamp > tenMinsAgo);
                 if (userMsgs.size > 0) {
                     await ch.bulkDelete(userMsgs).catch(() => {});
@@ -288,11 +282,10 @@ client.on('messageCreate', async message => {
             } catch (e) {}
         });
 
-        // İşlemi burada kes, bot diğer komutlara/sohbete bakmasın ve hata vermesin
         return; 
     }
 
-    // --- NOKTA KOMUTLARI YÖNETİCİSİ (.duyuru, .daily, .koruma vb.) ---
+    // --- NOKTA KOMUTLARI YÖNETİCİSİ ---
     if (message.content.startsWith('.')) {
         const args = message.content.slice(1).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();

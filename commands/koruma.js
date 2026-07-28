@@ -18,21 +18,25 @@ module.exports = {
         const lang = args[1] ? args[1].toLowerCase() : 'tr'; // Varsayılan TR
 
         if (action === 'kur') {
+            
+            // 👇 KANKA İŞTE O İKONUN LİNKİNİ BURAYA YAPIŞTIRACAKSIN 👇
+            // Discord'a o ikonu at, sağ tıkla "Bağlantıyı Kopyala" de ve buraya yapıştır.
+            const gpxIkonLinki = 'IKON_LINKI_BURAYA_GELECEK'; 
+
             const embed = new EmbedBuilder()
                 .setColor('#2B2D31') // Discord arkaplan rengiyle uyumlu siyahımsı
-                .setThumbnail(message.guild.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png'); // Sunucu PP
+                .setThumbnail(gpxIkonLinki !== 'IKON_LINKI_BURAYA_GELECEK' ? gpxIkonLinki : 'https://cdn-icons-png.flaticon.com/512/10155/10155823.png'); // Link girmezsen geçici karanlık bir dosya ikonu koyar
 
             if (lang === 'en') {
                 embed.setTitle('DO NOT SEND MESSAGES IN THIS CHANNEL')
                      .setDescription('This channel is used to catch spam bots. Any messages sent here will result in a **1 hour mute**.')
-                     .addFields({ name: '🍯 Mute', value: `${config.koruma_mutes || 0}`, inline: true });
+                     .addFields({ name: 'Mute', value: `${config.koruma_mutes || 0}`, inline: true });
             } else {
                 embed.setTitle('BU KANALA MESAJ GÖNDERMEYİN')
                      .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.')
-                     .addFields({ name: '🍯 Mute', value: `${config.koruma_mutes || 0}`, inline: true });
+                     .addFields({ name: 'Mute', value: `${config.koruma_mutes || 0}`, inline: true });
             }
 
-            // Uyarı: Artık buton (components) yok, her şey panelin içinde!
             const honeypotMsg = await message.channel.send({ embeds: [embed] });
 
             config.koruma_channel = message.channel.id;
@@ -40,7 +44,7 @@ module.exports = {
             config.koruma_lang = lang; 
             await config.save();
 
-            message.delete().catch(() => {}); // .koruma kur yazısını siler ki temiz kalsın
+            message.delete().catch(() => {}); 
         } 
         else if (action === 'kaldır' || action === 'kaldir') {
             config.koruma_channel = null;
