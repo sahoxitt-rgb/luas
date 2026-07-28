@@ -35,7 +35,16 @@ const UserModel = mongoose.model('User', UserSchema);
 const TicketSchema = new mongoose.Schema({ id: { type: String, default: "ticket" }, count: { type: Number, default: 0 } });
 const TicketModel = mongoose.model('TicketCounter', TicketSchema);
 
-const ConfigSchema = new mongoose.Schema({ id: { type: String, default: "config" }, tr_ss_channel: { type: String, default: null }, en_ss_channel: { type: String, default: null }, ai_channel: { type: String, default: null } });
+// KORUMA SİSTEMİ EKLENDİ
+const ConfigSchema = new mongoose.Schema({ 
+    id: { type: String, default: "config" }, 
+    tr_ss_channel: { type: String, default: null }, 
+    en_ss_channel: { type: String, default: null }, 
+    ai_channel: { type: String, default: null },
+    koruma_channel: { type: String, default: null },
+    koruma_message_id: { type: String, default: null },
+    koruma_mutes: { type: Number, default: 0 }
+});
 const ConfigModel = mongoose.model('Config', ConfigSchema);
 
 const CountingSchema = new mongoose.Schema({ guildId: String, channelId: String, language: String, currentCount: { type: Number, default: 0 }, lastUserId: { type: String, default: null } });
@@ -81,7 +90,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.textCommands = new Collection(); // Nokta komutları için koleksiyon
+client.textCommands = new Collection(); 
 
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -216,7 +225,7 @@ client.on('messageDelete', async message => {
 });
 
 // ==========================================
-// MESAJ DİNLEME (SOHBET, NOKTA KOMUTLARI, SAYI, ABONE)
+// MESAJ DİNLEME YÖNETİCİSİ
 // ==========================================
 let queueCount = 0; 
 client.on('messageCreate', async message => {
@@ -228,14 +237,63 @@ client.on('messageCreate', async message => {
         await config.save();
     }
 
-    // --- NOKTA KOMUTLARI YÖNETİCİSİ (.duyuru, .daily vb.) ---
+    // --- KORUMA (HONEYPOT) KONTROLÜ (EN ÜSTTE ÇALIŞIR) ---
+    if (config.koruma_channel === message.channel.id && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        
+        // 1. Tetiği çeken mesajı anında sil
+        await message.delete().catch(() => {});
+
+        // 2. Kişiye 1 Saat Mute At (Timeout)
+        try {
+            await message.member.timeout(60 * 60 * 1000, 'Koruma kanalına mesaj gönderdi (Honeypot tuzağına düştü)');
+        } catch (err) {
+            console.error('Mute atılamadı:', err);
+        }
+
+        // 3. Veritabanındaki sayacı güncelle
+        config.koruma_mutes = (config.koruma_mutes || 0) + 1;
+        await config.save();
+
+        // 4. Tuzağın embed mesajındaki (Susturma: X) butonunu güncelle
+        if (config.koruma_message_id) {
+            try {
+                const honeypotMsg = await message.channel.messages.fetch(config.koruma_message_id);
+                if (honeypotMsg) {
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('dummy_mutes')
+                            .setLabel(`🍯 Susturma: ${config.koruma_mutes}`)
+                            .setStyle(ButtonStyle.Secondary)
+                            .setDisabled(true)
+                    );
+                    await honeypotMsg.edit({ components: [row] }).catch(() => {});
+                }
+            } catch (e) {}
+        }
+
+        // 5. Sunucudaki son 10 dakikada yazdığı TÜM mesajları sil (Tüm kanalları tarar)
+        const tenMinsAgo = Date.now() - (10 * 60 * 1000);
+        message.guild.channels.cache.filter(c => c.isTextBased()).forEach(async (ch) => {
+            try {
+                const msgs = await ch.messages.fetch({ limit: 50 }); // Kanal başı son 50 mesaja bakar
+                const userMsgs = msgs.filter(m => m.author.id === message.author.id && m.createdTimestamp > tenMinsAgo);
+                if (userMsgs.size > 0) {
+                    await ch.bulkDelete(userMsgs).catch(() => {});
+                }
+            } catch (e) {}
+        });
+
+        // İşlemi burada kes, bot diğer komutlara/sohbete bakmasın
+        return; 
+    }
+
+    // --- NOKTA KOMUTLARI YÖNETİCİSİ (.duyuru, .daily, .koruma vb.) ---
     if (message.content.startsWith('.')) {
         const args = message.content.slice(1).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
         const command = client.textCommands.get(commandName);
         if (command) {
             try {
-                // OwoModel buraya eklendi ki commands içindeki dosyalar veritabanını görsün!
                 await command.executeText(message, args, UserModel, TicketModel, ConfigModel, CountingModel, OwoModel);
             } catch (error) {
                 console.error("Text Command Error:", error);
