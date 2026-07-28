@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
     name: 'koruma',
@@ -15,38 +15,41 @@ module.exports = {
         }
 
         const action = args[0] ? args[0].toLowerCase() : null;
+        const lang = args[1] ? args[1].toLowerCase() : 'tr'; // Varsayılan TR
 
         if (action === 'kur') {
             const embed = new EmbedBuilder()
-                .setColor('#2B2D31') // Resimdeki gibi koyu discord teması
-                .setTitle('BU KANALA MESAJ GÖNDERMEYİN')
-                .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.')
-                .setThumbnail('https://cdn-icons-png.flaticon.com/512/10007/10007011.png'); // Bal küpü ikonu
+                .setColor('#2B2D31') // Discord arkaplan rengiyle uyumlu siyahımsı
+                .setThumbnail(message.guild.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png'); // Sunucu PP
 
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('dummy_mutes')
-                    .setLabel(`🍯 Susturma: ${config.koruma_mutes || 0}`)
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(true) // Sadece gösterge amaçlı, tıklanamaz
-            );
+            if (lang === 'en') {
+                embed.setTitle('DO NOT SEND MESSAGES IN THIS CHANNEL')
+                     .setDescription('This channel is used to catch spam bots. Any messages sent here will result in a **1 hour mute**.')
+                     .addFields({ name: '🍯 Mute', value: `${config.koruma_mutes || 0}`, inline: true });
+            } else {
+                embed.setTitle('BU KANALA MESAJ GÖNDERMEYİN')
+                     .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.')
+                     .addFields({ name: '🍯 Mute', value: `${config.koruma_mutes || 0}`, inline: true });
+            }
 
-            const honeypotMsg = await message.channel.send({ embeds: [embed], components: [row] });
+            // Uyarı: Artık buton (components) yok, her şey panelin içinde!
+            const honeypotMsg = await message.channel.send({ embeds: [embed] });
 
             config.koruma_channel = message.channel.id;
             config.koruma_message_id = honeypotMsg.id;
+            config.koruma_lang = lang; 
             await config.save();
 
-            message.delete().catch(() => {}); // .koruma kur yazısını siler
+            message.delete().catch(() => {}); // .koruma kur yazısını siler ki temiz kalsın
         } 
         else if (action === 'kaldır' || action === 'kaldir') {
             config.koruma_channel = null;
             config.koruma_message_id = null;
             await config.save();
-            return message.reply('✅ Koruma kalkanı bu kanaldan kaldırıldı!');
+            return message.reply('✅ Koruma kalkanı bu kanaldan başarıyla kaldırıldı!');
         } 
         else {
-            return message.reply('❌ Kullanım: `.koruma kur` veya `.koruma kaldır`');
+            return message.reply('❌ Kullanım: `.koruma kur tr` | `.koruma kur en` | `.koruma kaldır`');
         }
     }
 };
