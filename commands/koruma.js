@@ -15,26 +15,21 @@ module.exports = {
         }
 
         const action = args[0] ? args[0].toLowerCase() : null;
-        const lang = args[1] ? args[1].toLowerCase() : 'tr'; // Varsayılan TR
 
         if (action === 'kur') {
             
-            // Senin attığın resmin Discord'da çalışan direkt hali
+            // Senin attığın ikonun direkt linki
             const gpxIkonLinki = 'https://i.ibb.co/mFX524Zp/image.png'; 
 
             const embed = new EmbedBuilder()
-                .setColor('#2B2D31') // Discord arkaplan rengiyle uyumlu siyahımsı
-                .setThumbnail(gpxIkonLinki);
+                .setColor('#2B2D31') // Discord arkaplan rengiyle uyumlu
+                .setThumbnail(gpxIkonLinki)
+                // Başlıkta her iki dil
+                .setTitle('BU KANALA MESAJ GÖNDERMEYİN / DO NOT SEND MESSAGES')
+                // Açıklamada her iki dil alt alta
+                .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.\n\nThis channel is used to catch spam bots. Any messages sent here will result in a **1 hour mute**.');
 
-            if (lang === 'en') {
-                embed.setTitle('DO NOT SEND MESSAGES IN THIS CHANNEL')
-                     .setDescription('This channel is used to catch spam bots. Any messages sent here will result in a **1 hour mute**.');
-            } else {
-                embed.setTitle('BU KANALA MESAJ GÖNDERMEYİN')
-                     .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.');
-            }
-
-            // Hem TR hem EN için sadece Mute yazacak
+            // Sadece Mute yazan alt butonumuz
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('dummy_mutes')
@@ -47,7 +42,6 @@ module.exports = {
 
             config.koruma_channel = message.channel.id;
             config.koruma_message_id = honeypotMsg.id;
-            config.koruma_lang = lang; 
             await config.save();
 
             message.delete().catch(() => {}); 
@@ -59,7 +53,7 @@ module.exports = {
             return message.reply('✅ Koruma kalkanı bu kanaldan başarıyla kaldırıldı!');
         } 
         else {
-            return message.reply('❌ Kullanım: `.koruma kur tr` | `.koruma kur en` | `.koruma kaldır`');
+            return message.reply('❌ Kullanım: `.koruma kur` | `.koruma kaldır`');
         }
     }
 };
