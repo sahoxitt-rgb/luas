@@ -19,7 +19,7 @@ module.exports = {
 
         if (action === 'kur') {
             
-            // Senin attığın resmin Discord'da çalışan direkt halini ayarladım
+            // Senin attığın resmin Discord'da çalışan direkt hali
             const gpxIkonLinki = 'https://i.ibb.co/mFX524Zp/image.png'; 
 
             const embed = new EmbedBuilder()
@@ -34,11 +34,11 @@ module.exports = {
                      .setDescription('Bu kanal spam botlarını ve kuralları ihlal edenleri yakalamak için kullanılmaktadır. Buraya gönderilen herhangi bir mesaj doğrudan **1 saatlik susturulma (mute)** ile sonuçlanacaktır.');
             }
 
-            // Mute sayacını tekrar panelin altına buton olarak ekledik!
+            // Hem TR hem EN için sadece Mute yazacak
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('dummy_mutes')
-                    .setLabel(lang === 'en' ? `Mute: ${config.koruma_mutes || 0}` : `Susturma: ${config.koruma_mutes || 0}`)
+                    .setLabel(`Mute: ${config.koruma_mutes || 0}`)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(true)
             );

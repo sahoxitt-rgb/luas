@@ -196,7 +196,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         
         if (roleLogChannel) {
             const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
-            const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
+            const removedRoles = oldMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
             
             let desc = `👤 **Kullanıcı:** <@${newMember.id}> (\`${newMember.user.tag}\`)\n\n`;
             
@@ -252,7 +252,6 @@ client.on('messageCreate', async message => {
         config.koruma_mutes = (config.koruma_mutes || 0) + 1;
         await config.save();
 
-        // Butonlu sisteme geri döndük, içeriden değil dışarıdan (component) güncelleyecek
         if (config.koruma_message_id) {
             try {
                 const honeypotMsg = await message.channel.messages.fetch(config.koruma_message_id);
@@ -260,7 +259,8 @@ client.on('messageCreate', async message => {
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId('dummy_mutes')
-                            .setLabel(config.koruma_lang === 'en' ? `Mute: ${config.koruma_mutes}` : `Susturma: ${config.koruma_mutes}`)
+                            // Dil seçeneğine bakılmaksızın sadece Mute yazacak
+                            .setLabel(`Mute: ${config.koruma_mutes}`)
                             .setStyle(ButtonStyle.Secondary)
                             .setDisabled(true)
                     );
